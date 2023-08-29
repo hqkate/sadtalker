@@ -186,9 +186,9 @@ class ConvBlock(nn.Cell):
         if in_planes != out_planes:
             self.downsample = nn.SequentialCell(
                 nn.BatchNorm2d(in_planes),
-                nn.ReLU(True),
+                nn.ReLU(),
                 nn.Conv2d(in_planes, out_planes,
-                          kernel_size=1, stride=1, bias=False),
+                          kernel_size=1, stride=1, has_bias=False),
             )
         else:
             self.downsample = None
@@ -308,6 +308,7 @@ class FAN(nn.Cell):
                 out_channels=64,
                 kernel_size=7,
                 stride=2,
+                pad_mode='pad',
                 padding=3)
         self.bn1 = nn.BatchNorm2d(64)
         self.conv2 = ConvBlock(64, 128)

@@ -1,24 +1,23 @@
-import os
 import cv2
-import time
-import glob
-import argparse
-import scipy
 import numpy as np
 from PIL import Image
-from tqdm import tqdm
-from itertools import cycle
 
 from models.face3d.keypoint_extractor import KeypointExtractor
-from facexlib.alignment import landmark_98_to_68
+from models.face3d.facexlib import landmark_98_to_68
+from models.face3d.facexlib import init_detection_model, init_alignment_model
 
 import numpy as np
 from PIL import Image
 
 
 class Preprocesser:
-    def __init__(self, device='cuda'):
-        self.predictor = KeypointExtractor(device)
+    def __init__(self):
+
+        detector = init_alignment_model('awing_fan')
+        det_net = init_detection_model(
+            'retinaface_resnet50', half=False)
+
+        self.predictor = KeypointExtractor(detector, det_net)
 
     def get_landmark(self, img_np):
         """get landmark with dlib
@@ -31,11 +30,12 @@ class Preprocesser:
         det = dets[0]
 
         img = img_np[int(det[1]):int(det[3]), int(det[0]):int(det[2]), :]
-        lm = landmark_98_to_68(self.predictor.detector.get_landmarks(img)) # [0]
+        lm = landmark_98_to_68(
+            self.predictor.detector.get_landmarks(img))  # [0]
 
-        #### keypoints to the original location
-        lm[:,0] += int(det[0])
-        lm[:,1] += int(det[1])
+        # keypoints to the original location
+        lm[:, 0] += int(det[0])
+        lm[:, 1] += int(det[1])
 
         return lm
 
@@ -65,24 +65,29 @@ class Preprocesser:
         eye_to_mouth = mouth_avg - eye_avg
 
         # Choose oriented crop rectangle.
-        x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]  # Addition of binocular difference and double mouth difference
+        # Addition of binocular difference and double mouth difference
+        x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
         x /= np.hypot(*x)   # hypot函数计算直角三角形的斜边长，用斜边长对三角形两条直边做归一化
-        x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth) * 1.8)    # 双眼差和眼嘴差，选较大的作为基准尺度
+        x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth)
+                 * 1.8)    # 双眼差和眼嘴差，选较大的作为基准尺度
         y = np.flipud(x) * [-1, 1]
         c = eye_avg + eye_to_mouth * 0.1
-        quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])   # 定义四边形，以面部基准位置为中心上下左右平移得到四个顶点
+        # 定义四边形，以面部基准位置为中心上下左右平移得到四个顶点
+        quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
         qsize = np.hypot(*x) * 2    # 定义四边形的大小（边长），为基准尺度的2倍
 
         # Shrink.
         # 如果计算出的四边形太大了，就按比例缩小它
         shrink = int(np.floor(qsize / output_size * 0.5))
         if shrink > 1:
-            rsize = (int(np.rint(float(img.size[0]) / shrink)), int(np.rint(float(img.size[1]) / shrink)))
+            rsize = (int(np.rint(
+                float(img.size[0]) / shrink)), int(np.rint(float(img.size[1]) / shrink)))
             img = img.resize(rsize, Image.ANTIALIAS)
             quad /= shrink
             qsize /= shrink
         else:
-            rsize = (int(np.rint(float(img.size[0]))), int(np.rint(float(img.size[1]))))
+            rsize = (int(np.rint(float(img.size[0]))), int(
+                np.rint(float(img.size[1]))))
 
         # Crop.
         border = max(int(np.rint(qsize * 0.1)), 3)
@@ -128,7 +133,8 @@ class Preprocesser:
 
         if lm is None:
             raise 'can not detect the landmark from source image'
-        rsize, crop, quad = self.align_face(img=Image.fromarray(img_np), lm=lm, output_size=xsize)
+        rsize, crop, quad = self.align_face(
+            img=Image.fromarray(img_np), lm=lm, output_size=xsize)
         clx, cly, crx, cry = crop
         lx, ly, rx, ry = quad
         lx, ly, rx, ry = int(lx), int(ly), int(rx), int(ry)
@@ -140,3 +146,8 @@ class Preprocesser:
                 _inp = _inp[ly:ry, lx:rx]
             img_np_list[_i] = _inp
         return img_np_list, crop, quad
+
+
+if __name__ == "__main__":
+
+    preprocessor = Preprocesser()

@@ -26,9 +26,9 @@ def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, d
     )
 
 
-def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
+def conv1x1(in_planes: int, out_planes: int, stride: int = 1, bias: bool = False) -> nn.Conv2d:
     """1x1 convolution"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, has_bias=False)
+    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, has_bias=bias)
 
 
 class BasicBlock(nn.Cell):
@@ -147,6 +147,7 @@ class ResNet(nn.Cell):
         layers: List[int],
         num_classes: int = 1000,
         zero_init_residual: bool = False,
+        use_last_fc: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
@@ -168,6 +169,7 @@ class ResNet(nn.Cell):
                 "replace_stride_with_dilation should be None "
                 f"or a 3-element tuple, got {replace_stride_with_dilation}"
             )
+        self.use_last_fc = use_last_fc
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(
@@ -183,7 +185,9 @@ class ResNet(nn.Cell):
         self.layer4 = self._make_layer(
             block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Dense(512 * block.expansion, num_classes)
+
+        if self.use_last_fc:
+            self.fc = nn.Dense(512 * block.expansion, num_classes)
 
         for m in self.cells():
             if isinstance(m, nn.Conv2d):

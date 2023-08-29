@@ -1,35 +1,30 @@
 import numpy as np
 import cv2
 import os
-import sys
-import torch
 from tqdm import tqdm
 from PIL import Image
 
 # 3dmm extraction
-import safetensors
-import safetensors.torch
-from models.face3d.util.preprocess import align_img
-from models.face3d.util.load_mats import load_lm3d
-from models.face3d.models import networks
+import mindspore as ms
+from models.face3d.utils import load_lm3d, align_img
+from models.face3d.networks import define_net_recon
 
-from scipy.io import loadmat, savemat
+from scipy.io import savemat
 from utils.croper import Preprocesser
 
 
 import warnings
 
-from utils.safetensor_helper import load_x_from_safetensor
 warnings.filterwarnings("ignore")
 
 
 def split_coeff(coeffs):
     """
     Return:
-        coeffs_dict     -- a dict of torch.tensors
+        coeffs_dict     -- a dict of ms.tensors
 
     Parameters:
-        coeffs          -- torch.tensor, size (B, 256)
+        coeffs          -- ms.tensor, size (B, 256)
     """
     id_coeffs = coeffs[:, :80]
     exp_coeffs = coeffs[:, 80: 144]
@@ -48,25 +43,18 @@ def split_coeff(coeffs):
 
 
 class CropAndExtract():
-    def __init__(self, sadtalker_path, device):
+    def __init__(self, sadtalker_path):
 
-        self.propress = Preprocesser(device)
-        self.net_recon = networks.define_net_recon(
-            net_recon='resnet50', use_last_fc=False, init_path='').to(device)
+        self.propress = Preprocesser()
+        self.net_recon = define_net_recon(
+            net_recon='resnet50', use_last_fc=False, init_path='')
 
-        if sadtalker_path['use_safetensor']:
-            checkpoint = safetensors.torch.load_file(
-                sadtalker_path['checkpoint'])
-            self.net_recon.load_state_dict(
-                load_x_from_safetensor(checkpoint, 'face_3drecon'))
-        else:
-            checkpoint = torch.load(
-                sadtalker_path['path_of_net_recon_model'], map_location=torch.device(device))
-            self.net_recon.load_state_dict(checkpoint['net_recon'])
+        checkpoint = ms.load_checkpoint(
+            sadtalker_path['path_of_net_recon_model'])
+        ms.load_param_into_net(self.net_recon, checkpoint['net_recon'])
 
-        self.net_recon.eval()
+        self.net_recon.set_train(False)
         self.lm3d_std = load_lm3d(sadtalker_path['dir_of_BFM_fitting'])
-        self.device = device
 
     def generate(self, input_path, save_dir, crop_or_resize='crop', source_image_flag=False, pic_size=256):
 
@@ -163,12 +151,11 @@ class CropAndExtract():
 
                 trans_params = np.array(
                     [float(item) for item in np.hsplit(trans_params, 5)]).astype(np.float32)
-                im_t = torch.tensor(np.array(
-                    im1)/255., dtype=torch.float32).permute(2, 0, 1).to(self.device).unsqueeze(0)
+                im_t = ms.Tensor(np.array(
+                    im1)/255., dtype=ms.float32).permute(2, 0, 1).unsqueeze(0)
 
-                with torch.no_grad():
-                    full_coeff = self.net_recon(im_t)
-                    coeffs = split_coeff(full_coeff)
+                full_coeff = self.net_recon(im_t)
+                coeffs = split_coeff(full_coeff)
 
                 pred_coeff = {key: coeffs[key].cpu().numpy() for key in coeffs}
 
