@@ -104,13 +104,13 @@ class AddCoordsTh(nn.Cell):
 
         if self.with_r:
             rr = ops.sqrt(ops.pow(xx_channel, 2) +
-                            ops.pow(yy_channel, 2))
+                          ops.pow(yy_channel, 2))
             rr = rr / ops.max(rr)
             ret = ops.cat([ret, rr], axis=1)
 
         if self.with_boundary and heatmap is not None:
             ret = ops.cat([ret, xx_boundary_channel,
-                            yy_boundary_channel], axis=1)
+                           yy_boundary_channel], axis=1)
         return ret
 
 
@@ -126,7 +126,8 @@ class CoordConvTh(nn.Cell):
             in_channels += 1
         if with_boundary and not first_one:
             in_channels += 2
-        self.conv = nn.Conv2d(in_channels=in_channels, *args, **kwargs)
+        self.conv = nn.Conv2d(in_channels=in_channels,
+                              has_bias=True, *args, **kwargs)
 
     def construct(self, input_tensor, heatmap=None):
         ret = self.addcoords(input_tensor, heatmap)
@@ -239,34 +240,44 @@ class HourGlass(nn.Cell):
         self._generate_network(self.depth)
 
     def _generate_network(self, level):
-        self.insert_child_to_cell('b1_' + str(level), ConvBlock(256, 256))
+        # self.insert_child_to_cell('b1_' + str(level), ConvBlock(256, 256))
+        # self.insert_child_to_cell('b2_' + str(level), ConvBlock(256, 256))
 
-        self.insert_child_to_cell('b2_' + str(level), ConvBlock(256, 256))
+        setattr(self, 'b1_' + str(level), ConvBlock(256, 256))
+        setattr(self, 'b2_' + str(level), ConvBlock(256, 256))
 
         if level > 1:
             self._generate_network(level - 1)
         else:
-            self.insert_child_to_cell('b2_plus_' + str(level), ConvBlock(256, 256))
+            # self.insert_child_to_cell(
+            #     'b2_plus_' + str(level), ConvBlock(256, 256))
 
-        self.insert_child_to_cell('b3_' + str(level), ConvBlock(256, 256))
+            setattr(self, 'b2_plus_' + str(level), ConvBlock(256, 256))
+
+        # self.insert_child_to_cell('b3_' + str(level), ConvBlock(256, 256))
+        setattr(self, 'b3_' + str(level), ConvBlock(256, 256))
 
     def _forward(self, level, inp):
         # Upper branch
         up1 = inp
-        up1 = self._cells['b1_' + str(level)](up1)
+        # up1 = self._cells['b1_' + str(level)](up1)
+        up1 = getattr(self, 'b1_' + str(level))(up1)
 
         # Lower branch
         low1 = ops.avg_pool2d(inp, 2, stride=2)
-        low1 = self._cells['b2_' + str(level)](low1)
+        # low1 = self._cells['b2_' + str(level)](low1)
+        low1 = getattr(self, 'b2_' + str(level))(low1)
 
         if level > 1:
             low2 = self._forward(level - 1, low1)
         else:
             low2 = low1
-            low2 = self._cells['b2_plus_' + str(level)](low2)
+            # low2 = self._cells['b2_plus_' + str(level)](low2)
+            low2 = getattr(self, 'b2_plus_' + str(level))(low2)
 
         low3 = low2
-        low3 = self._cells['b3_' + str(level)](low3)
+        # low3 = self._cells['b3_' + str(level)](low3)
+        low3 = getattr(self, 'b3_' + str(level))(low3)
 
         up2 = ops.interpolate(low3, scale_factor=2, mode='nearest')
 
@@ -321,20 +332,36 @@ class FAN(nn.Cell):
                 first_one = True
             else:
                 first_one = False
-            self.insert_child_to_cell('m' + str(hg_module),
-                            HourGlass(1, 4, 256, first_one))
-            self.insert_child_to_cell('top_m_' + str(hg_module), ConvBlock(256, 256))
-            self.insert_child_to_cell('conv_last' + str(hg_module),
-                            nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
-            self.insert_child_to_cell('bn_end' + str(hg_module), nn.BatchNorm2d(256))
-            self.insert_child_to_cell('l' + str(hg_module), nn.Conv2d(256,
-                            num_landmarks + 1, kernel_size=1, stride=1, padding=0))
+
+            setattr(self, 'm' + str(hg_module),
+                    HourGlass(1, 4, 256, first_one))
+            setattr(self, 'top_m_' + str(hg_module), ConvBlock(256, 256))
+            setattr(self, 'conv_last' + str(hg_module), nn.Conv2d(256,
+                    256, kernel_size=1, stride=1, padding=0, has_bias=True))
+            setattr(self, 'bn_end' + str(hg_module), nn.BatchNorm2d(256))
+            setattr(self, 'l' + str(hg_module), nn.Conv2d(256, num_landmarks +
+                    1, kernel_size=1, stride=1, padding=0, has_bias=True))
+
+            # self.insert_child_to_cell('m' + str(hg_module),
+            #                 HourGlass(1, 4, 256, first_one))
+            # self.insert_child_to_cell('top_m_' + str(hg_module), ConvBlock(256, 256))
+            # self.insert_child_to_cell('conv_last' + str(hg_module),
+            #                 nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0, has_bias=True))
+            # self.insert_child_to_cell('bn_end' + str(hg_module), nn.BatchNorm2d(256))
+            # self.insert_child_to_cell('l' + str(hg_module), nn.Conv2d(256,
+            #                 num_landmarks + 1, kernel_size=1, stride=1, padding=0, has_bias=True))
 
             if hg_module < self.num_modules - 1:
-                self.insert_child_to_cell(
-                    'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
-                self.insert_child_to_cell('al' + str(hg_module),
-                                nn.Conv2d(num_landmarks + 1, 256, kernel_size=1, stride=1, padding=0))
+
+                setattr(self, 'bl' + str(hg_module), nn.Conv2d(256, 256,
+                        kernel_size=1, stride=1, padding=0, has_bias=True))
+                setattr(self, 'al' + str(hg_module), nn.Conv2d(num_landmarks +
+                        1, 256, kernel_size=1, stride=1, padding=0, has_bias=True))
+
+                # self.insert_child_to_cell(
+                #     'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0, has_bias=True))
+                # self.insert_child_to_cell('al' + str(hg_module),
+                #                           nn.Conv2d(num_landmarks + 1, 256, kernel_size=1, stride=1, padding=0, has_bias=True))
 
     def construct(self, x):
         x, _ = self.conv1(x)
@@ -350,25 +377,33 @@ class FAN(nn.Cell):
         boundary_channels = []
         tmp_out = None
         for i in range(self.num_modules):
-            hg, boundary_channel = self._cells['m' +
-                                                 str(i)](previous, tmp_out)
+            # hg, boundary_channel = self._cells['m' +
+            #                                    str(i)](previous, tmp_out)
+
+            hg, boundary_channel = getattr(self, 'm' + str(i))(previous, tmp_out)
 
             ll = hg
-            ll = self._cells['top_m_' + str(i)](ll)
+            # ll = self._cells['top_m_' + str(i)](ll)
+            # ll = ops.relu(self._cells['bn_end' + str(i)]
+            #               (self._cells['conv_last' + str(i)](ll)), True)
 
-            ll = ops.relu(self._cells['bn_end' + str(i)]
-                        (self._cells['conv_last' + str(i)](ll)), True)
+            ll = getattr(self, 'top_m_' + str(i))(ll)
+            ll = ops.relu(getattr(self, 'bn_end' + str(i))
+                          (getattr(self, 'conv_last' + str(i))(ll)), True)
 
             # Predict heatmaps
-            tmp_out = self._cells['l' + str(i)](ll)
+            # tmp_out = self._cells['l' + str(i)](ll)
+            tmp_out = getattr(self, 'l' + str(i))(ll)
             if self.end_relu:
                 tmp_out = ops.relu(tmp_out)  # HACK: Added relu
             outputs.append(tmp_out)
             boundary_channels.append(boundary_channel)
 
             if i < self.num_modules - 1:
-                ll = self._cells['bl' + str(i)](ll)
-                tmp_out_ = self._cells['al' + str(i)](tmp_out)
+                # ll = self._cells['bl' + str(i)](ll)
+                # tmp_out_ = self._cells['al' + str(i)](tmp_out)
+                ll = getattr(self, 'bl' + str(i))(ll)
+                tmp_out_ = getattr(self, 'al' + str(i))(tmp_out)
                 previous = previous + ll + tmp_out_
 
         return outputs, boundary_channels
@@ -395,7 +430,7 @@ class FAN(nn.Cell):
         return pred
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
 
     model = FAN(num_modules=4, num_landmarks=98)
     print(model)

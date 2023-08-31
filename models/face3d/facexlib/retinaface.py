@@ -4,7 +4,7 @@ import mindspore as ms
 from mindspore import nn, ops
 from PIL import Image
 
-from models.utils import IntermediateLayerGetter
+from models.utils.utils import IntermediateLayerGetter
 from models.face3d.facexlib.resnet import resnet50
 from models.face3d.facexlib.align_trains import get_reference_facial_points, warp_and_crop_face
 from models.face3d.facexlib.retinaface_net import FPN, SSH, MobileNetV1, make_bbox_head, make_class_head, make_landmark_head
@@ -38,7 +38,7 @@ def generate_config(network_name):
     }
 
     cfg_re50 = {
-        'name': 'Resnet50',
+        'name': 'resnet50',
         'min_sizes': [[16, 32], [64, 128], [256, 512]],
         'steps': [8, 16, 32],
         'variance': [0.1, 0.2],
@@ -89,7 +89,7 @@ class RetinaFace(nn.Cell):
         if cfg['name'] == 'mobilenet0.25':
             backbone = MobileNetV1()
             self.body = IntermediateLayerGetter(backbone, cfg['return_layers'])
-        elif cfg['name'] == 'Resnet50':
+        elif cfg['name'] == 'resnet50':
             backbone = resnet50()
             self.body = IntermediateLayerGetter(backbone, cfg['return_layers'])
 
@@ -117,7 +117,7 @@ class RetinaFace(nn.Cell):
     def construct(self, inputs):
         out, _ = self.body(inputs)
 
-        if self.backbone == 'mobilenet0.25' or self.backbone == 'Resnet50':
+        if self.backbone == 'mobilenet0.25' or self.backbone == 'resnet50':
             out = list(out.values())
         # FPN
         fpn = self.fpn(out)

@@ -49,9 +49,9 @@ class CropAndExtract():
         self.net_recon = define_net_recon(
             net_recon='resnet50', use_last_fc=False, init_path='')
 
-        checkpoint = ms.load_checkpoint(
+        param_dict = ms.load_checkpoint(
             sadtalker_path['path_of_net_recon_model'])
-        ms.load_param_into_net(self.net_recon, checkpoint['net_recon'])
+        ms.load_param_into_net(self.net_recon, param_dict)
 
         self.net_recon.set_train(False)
         self.lm3d_std = load_lm3d(sadtalker_path['dir_of_BFM_fitting'])

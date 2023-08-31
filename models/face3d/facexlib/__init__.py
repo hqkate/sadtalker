@@ -65,13 +65,13 @@ def init_detection_model(model_name, half=False, model_rootpath=None):
     else:
         raise NotImplementedError(f'{model_name} is not implemented.')
 
-    param_dict = ms.load_checkpoint(model_path)
-    # remove unnecessary 'module.'
-    for k, v in deepcopy(param_dict).items():
-        if k.startswith('module.'):
-            param_dict[k[7:]] = v
-            param_dict.pop(k)
-    ms.load_param_into_net(model, param_dict)
+    # param_dict = ms.load_checkpoint(model_path)
+    # # remove unnecessary 'module.'
+    # for k, v in deepcopy(param_dict).items():
+    #     if k.startswith('module.'):
+    #         param_dict[k[7:]] = v
+    #         param_dict.pop(k)
+    # ms.load_param_into_net(model, param_dict)
     model.set_train(False)
     return model
 
@@ -79,7 +79,7 @@ def init_detection_model(model_name, half=False, model_rootpath=None):
 def init_alignment_model(model_name, half=False, model_rootpath=None):
     if model_name == 'awing_fan':
         model = FAN(num_modules=4, num_landmarks=98)
-        model_path = 'alignment_WFLW_4HG.pth'
+        model_path = 'checkpoints/ms/ms_detector_fan.ckpt'
     else:
         raise NotImplementedError(f'{model_name} is not implemented.')
 
