@@ -1,14 +1,20 @@
 import os
 import cv2
 import yaml
+import imageio
 import numpy as np
 import mindspore as ms
+from pydub import AudioSegment
 from skimage import img_as_ubyte
 
-from modules.keypoint_detector import HEEstimator, KPDetector
-from modules.mapping import MappingNet
-from modules.generator import OcclusionAwareSPADEGenerator
-from modules.make_animation import make_animation
+from models.facerender.modules.keypoint_detector import HEEstimator, KPDetector
+from models.facerender.modules.mapping import MappingNet
+from models.facerender.modules.generator import OcclusionAwareSPADEGenerator
+from models.facerender.modules.make_animation import make_animation
+
+from utils.face_enhancer import enhancer_generator_with_len, enhancer_list
+from utils.paste_pic import paste_pic
+from utils.videoio import save_video_with_watermark
 
 
 def load_cpk_facevid2vid(self, checkpoint_path, generator=None, discriminator=None,
@@ -17,27 +23,27 @@ def load_cpk_facevid2vid(self, checkpoint_path, generator=None, discriminator=No
                     optimizer_he_estimator=None, device="cpu"):
     checkpoint = ms.load_checkpoint(checkpoint_path)
     if generator is not None:
-        generator.load_state_dict(checkpoint['generator'])
+        ms.load_param_into_net(generator, checkpoint['generator'])
     if kp_detector is not None:
-        kp_detector.load_state_dict(checkpoint['kp_detector'])
+        ms.load_param_into_net(kp_detector, checkpoint['kp_detector'])
     if he_estimator is not None:
-        he_estimator.load_state_dict(checkpoint['he_estimator'])
+        ms.load_param_into_net(he_estimator, checkpoint['he_estimator'])
     if discriminator is not None:
         try:
-            discriminator.load_state_dict(checkpoint['discriminator'])
+            ms.load_param_into_net(discriminator, checkpoint['discriminator'])
         except:
             print ('No discriminator in the state-dict. Dicriminator will be randomly initialized')
     if optimizer_generator is not None:
-        optimizer_generator.load_state_dict(checkpoint['optimizer_generator'])
+        ms.load_param_into_net(optimizer_generator, checkpoint['optimizer_generator'])
     if optimizer_discriminator is not None:
         try:
-            optimizer_discriminator.load_state_dict(checkpoint['optimizer_discriminator'])
+            ms.load_param_into_net(optimizer_discriminator, checkpoint['optimizer_discriminator'])
         except RuntimeError as e:
             print ('No discriminator optimizer in the state-dict. Optimizer will be not initialized')
     if optimizer_kp_detector is not None:
-        optimizer_kp_detector.load_state_dict(checkpoint['optimizer_kp_detector'])
+        ms.load_param_into_net(optimizer_kp_detector, checkpoint['optimizer_kp_detector'])
     if optimizer_he_estimator is not None:
-        optimizer_he_estimator.load_state_dict(checkpoint['optimizer_he_estimator'])
+        ms.load_param_into_net(optimizer_he_estimator, checkpoint['optimizer_he_estimator'])
 
     return checkpoint['epoch']
 
@@ -46,13 +52,13 @@ def load_cpk_mapping(self, checkpoint_path, mapping=None, discriminator=None,
             optimizer_mapping=None, optimizer_discriminator=None, device='cpu'):
     checkpoint = ms.load_checkpoint(checkpoint_path)
     if mapping is not None:
-        mapping.load_state_dict(checkpoint['mapping'])
+        ms.load_param_into_net(mapping, checkpoint['mapping'])
     if discriminator is not None:
-        discriminator.load_state_dict(checkpoint['discriminator'])
+        ms.load_param_into_net(discriminator, checkpoint['discriminator'])
     if optimizer_mapping is not None:
-        optimizer_mapping.load_state_dict(checkpoint['optimizer_mapping'])
+        ms.load_param_into_net(optimizer_mapping, checkpoint['optimizer_mapping'])
     if optimizer_discriminator is not None:
-        optimizer_discriminator.load_state_dict(checkpoint['optimizer_discriminator'])
+        ms.load_param_into_net(optimizer_discriminator, checkpoint['optimizer_discriminator'])
 
         return checkpoint['epoch']
 
@@ -71,7 +77,7 @@ class AnimateFromCoeff():
                                **config['model_params']['common_params'])
         mapping = MappingNet(**config['model_params']['mapping_params'])
 
-        for param in generator.parameters():
+        for param in generator.get_parameters():
             param.requires_grad = False
         for param in kp_extractor.parameters():
             param.requires_grad = False
@@ -102,25 +108,22 @@ class AnimateFromCoeff():
 
     def generate(self, x, video_save_dir, pic_path, crop_info, enhancer=None, background_enhancer=None, preprocess='crop', img_size=256):
 
-        source_image=x['source_image'].type(ms.FloatTensor)
-        source_semantics=x['source_semantics'].type(ms.FloatTensor)
-        target_semantics=x['target_semantics_list'].type(ms.FloatTensor)
+        source_image=x['source_image'].astype(ms.Tensor)
+        source_semantics=x['source_semantics'].astype(ms.Tensor)
+        target_semantics=x['target_semantics_list'].astype(ms.Tensor)
         source_image=source_image.to(self.device)
         source_semantics=source_semantics.to(self.device)
         target_semantics=target_semantics.to(self.device)
         if 'yaw_c_seq' in x:
-            yaw_c_seq = x['yaw_c_seq'].type(ms.FloatTensor)
-            yaw_c_seq = x['yaw_c_seq'].to(self.device)
+            yaw_c_seq = x['yaw_c_seq'].astype(ms.Tensor)
         else:
             yaw_c_seq = None
         if 'pitch_c_seq' in x:
-            pitch_c_seq = x['pitch_c_seq'].type(ms.FloatTensor)
-            pitch_c_seq = x['pitch_c_seq'].to(self.device)
+            pitch_c_seq = x['pitch_c_seq'].astype(ms.Tensor)
         else:
             pitch_c_seq = None
         if 'roll_c_seq' in x:
-            roll_c_seq = x['roll_c_seq'].type(ms.FloatTensor)
-            roll_c_seq = x['roll_c_seq'].to(self.device)
+            roll_c_seq = x['roll_c_seq'].astype(ms.Tensor)
         else:
             roll_c_seq = None
 
@@ -136,7 +139,7 @@ class AnimateFromCoeff():
         video = []
         for idx in range(predictions_video.shape[0]):
             image = predictions_video[idx]
-            image = np.transpose(image.data.cpu().numpy(), [1, 2, 0]).astype(np.float32)
+            image = np.transpose(image.asnumpy(), [1, 2, 0]).astype(np.float32)
             video.append(image)
         result = img_as_ubyte(video)
 

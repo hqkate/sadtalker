@@ -4,12 +4,12 @@ import mindspore as ms
 from mindspore import nn, ops
 from PIL import Image
 
-from models.utils.utils import IntermediateLayerGetter
+# from models.utils.utils import IntermediateLayerGetter
 from models.face3d.facexlib.resnet import resnet50
 from models.face3d.facexlib.align_trains import get_reference_facial_points, warp_and_crop_face
-from models.face3d.facexlib.retinaface_net import FPN, SSH, MobileNetV1, make_bbox_head, make_class_head, make_landmark_head
+from models.face3d.facexlib.retinaface_net import FPN, SSH, make_bbox_head, make_class_head, make_landmark_head, retinafacebody_r50, retinafacebody_m25
 from models.face3d.facexlib.retinaface_utils import (PriorBox, batched_decode, batched_decode_landm, decode, decode_landm,
-                                                 py_cpu_nms)
+                                                     py_cpu_nms)
 
 
 def generate_config(network_name):
@@ -87,11 +87,10 @@ class RetinaFace(nn.Cell):
         # Build network.
         backbone = None
         if cfg['name'] == 'mobilenet0.25':
-            backbone = MobileNetV1()
-            self.body = IntermediateLayerGetter(backbone, cfg['return_layers'])
+            self.body = retinafacebody_m25()
         elif cfg['name'] == 'resnet50':
-            backbone = resnet50()
-            self.body = IntermediateLayerGetter(backbone, cfg['return_layers'])
+            # backbone = resnet50()
+            self.body = retinafacebody_r50()
 
         in_channels_stage2 = cfg['in_channel']
         in_channels_list = [
@@ -106,21 +105,32 @@ class RetinaFace(nn.Cell):
         self.ssh2 = SSH(out_channels, out_channels)
         self.ssh3 = SSH(out_channels, out_channels)
 
-        self.ClassHead = make_class_head(fpn_num=3, inchannels=cfg['out_channel'])
-        self.BboxHead = make_bbox_head(fpn_num=3, inchannels=cfg['out_channel'])
-        self.LandmarkHead = make_landmark_head(fpn_num=3, inchannels=cfg['out_channel'])
+        self.ClassHead = make_class_head(
+            fpn_num=3, inchannels=cfg['out_channel'])
+        self.BboxHead = make_bbox_head(
+            fpn_num=3, inchannels=cfg['out_channel'])
+        self.LandmarkHead = make_landmark_head(
+            fpn_num=3, inchannels=cfg['out_channel'])
 
         self.set_train(False)
         if self.half_inference:
             self.half()
 
     def construct(self, inputs):
-        out, _ = self.body(inputs)
+        # outputs = self.body(inputs)
 
-        if self.backbone == 'mobilenet0.25' or self.backbone == 'resnet50':
-            out = list(out.values())
+        out1 = np.load("../SadTalker/retinaface_body_out_1.npy")
+        out2 = np.load("../SadTalker/retinaface_body_out_2.npy")
+        out3 = np.load("../SadTalker/retinaface_body_out_3.npy")
+
+        print(out1)
+
+        outputs = [ms.Tensor(out1), ms.Tensor(out2), ms.Tensor(out3)]
+
         # FPN
-        fpn = self.fpn(out)
+        fpn = self.fpn(outputs)
+
+        print(fpn[0])
 
         # SSH
         feature1 = self.ssh1(fpn[0])
@@ -128,22 +138,28 @@ class RetinaFace(nn.Cell):
         feature3 = self.ssh3(fpn[2])
         features = [feature1, feature2, feature3]
 
-        bbox_regressions = ops.cat([self.BboxHead[i](feature) for i, feature in enumerate(features)], axis=1)
-        classifications = ops.cat([self.ClassHead[i](feature) for i, feature in enumerate(features)], axis=1)
-        tmp = [self.LandmarkHead[i](feature) for i, feature in enumerate(features)]
+        bbox_regressions = ops.cat(
+            [self.BboxHead[i](feature) for i, feature in enumerate(features)], axis=1)
+        classifications = ops.cat([self.ClassHead[i](feature)
+                                  for i, feature in enumerate(features)], axis=1)
+        tmp = [self.LandmarkHead[i](feature)
+               for i, feature in enumerate(features)]
         ldm_regressions = (ops.cat(tmp, axis=1))
 
         if self.phase == 'train':
             output = (bbox_regressions, classifications, ldm_regressions)
         else:
-            output = (bbox_regressions, ops.softmax(classifications, axis=-1), ldm_regressions)
+            output = (bbox_regressions, ops.softmax(
+                classifications, axis=-1), ldm_regressions)
         return output
 
     def __detect_faces(self, inputs):
         # get scale
         height, width = inputs.shape[2:]
-        self.scale = ms.Tensor([width, height, width, height], dtype=ms.float32)
-        tmp = [width, height, width, height, width, height, width, height, width, height]
+        self.scale = ms.Tensor(
+            [width, height, width, height], dtype=ms.float32)
+        tmp = [width, height, width, height, width,
+               height, width, height, width, height]
         self.scale1 = ms.Tensor(tmp, dtype=ms.float32)
 
         # forawrd
@@ -176,7 +192,8 @@ class RetinaFace(nn.Cell):
 
         # resize
         if resize != 1:
-            image = cv2.resize(image, None, None, fx=resize, fy=resize, interpolation=cv2.INTER_LINEAR)
+            image = cv2.resize(image, None, None, fx=resize,
+                               fy=resize, interpolation=cv2.INTER_LINEAR)
 
         # convert to torch.tensor format
         # image -= (104, 117, 123)
@@ -192,6 +209,7 @@ class RetinaFace(nn.Cell):
         nms_threshold=0.4,
         use_origin_size=True,
     ):
+
         image, self.resize = self.transform(image, use_origin_size)
         if self.half_inference:
             image = image.half()
@@ -199,13 +217,14 @@ class RetinaFace(nn.Cell):
 
         loc, conf, landmarks, priors = self.__detect_faces(image)
 
-        boxes = decode(loc.data.squeeze(0), priors.data, self.cfg['variance'])
+        boxes = decode(loc.squeeze(0), priors, self.cfg['variance'])
         boxes = boxes * self.scale / self.resize
         boxes = boxes.asnumpy()
 
-        scores = conf.squeeze(0).data.asnumpy()[:, 1]
+        scores = conf.squeeze(0).asnumpy()[:, 1]
 
-        landmarks = decode_landm(landmarks.squeeze(0), priors, self.cfg['variance'])
+        landmarks = decode_landm(landmarks.squeeze(
+            0), priors, self.cfg['variance'])
         landmarks = landmarks * self.scale1 / self.resize
         landmarks = landmarks.asnumpy()
 
@@ -218,13 +237,12 @@ class RetinaFace(nn.Cell):
         boxes, landmarks, scores = boxes[order], landmarks[order], scores[order]
 
         # do NMS
-        bounding_boxes = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+        bounding_boxes = np.hstack(
+            (boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+
         keep = py_cpu_nms(bounding_boxes, nms_threshold)
         bounding_boxes, landmarks = bounding_boxes[keep, :], landmarks[keep]
-        # self.t['forward_pass'].toc()
-        # print(self.t['forward_pass'].average_time)
-        # import sys
-        # sys.stdout.flush()
+
         return np.concatenate((bounding_boxes, landmarks), axis=1)
 
     def __align_multi(self, image, boxes, landmarks, limit=None):
@@ -238,9 +256,11 @@ class RetinaFace(nn.Cell):
 
         faces = []
         for landmark in landmarks:
-            facial5points = [[landmark[2 * j], landmark[2 * j + 1]] for j in range(5)]
+            facial5points = [[landmark[2 * j], landmark[2 * j + 1]]
+                             for j in range(5)]
 
-            warped_face = warp_and_crop_face(np.array(image), facial5points, self.reference, crop_size=(112, 112))
+            warped_face = warp_and_crop_face(
+                np.array(image), facial5points, self.reference, crop_size=(112, 112))
             faces.append(warped_face)
 
         return np.concatenate((boxes, landmarks), axis=1), faces
@@ -264,7 +284,8 @@ class RetinaFace(nn.Cell):
 
         # convert to opencv format
         if from_PIL:
-            frames = [cv2.cvtColor(np.asarray(frame), cv2.COLOR_RGB2BGR) for frame in frames]
+            frames = [cv2.cvtColor(np.asarray(frame), cv2.COLOR_RGB2BGR)
+                      for frame in frames]
             frames = np.asarray(frames, dtype=np.float32)
 
         # testing scale
@@ -283,13 +304,14 @@ class RetinaFace(nn.Cell):
                 frames = ops.interpolate(frames, scale_factor=resize)
             else:
                 frames = [
-                    cv2.resize(frame, None, None, fx=resize, fy=resize, interpolation=cv2.INTER_LINEAR)
+                    cv2.resize(frame, None, None, fx=resize,
+                               fy=resize, interpolation=cv2.INTER_LINEAR)
                     for frame in frames
                 ]
 
         # convert to torch.tensor format
         if not from_PIL:
-            frames = frames.transpose(1, 2).transpose(1, 3).contiguous()
+            frames = frames.transpose(1, 2).transpose(1, 3)
         else:
             frames = frames.transpose((0, 3, 1, 2))
             frames = ms.Tensor.from_numpy(frames)
@@ -319,8 +341,10 @@ class RetinaFace(nn.Cell):
 
         # decode
         priors = priors.unsqueeze(0)
-        b_loc = batched_decode(b_loc, priors, self.cfg['variance']) * self.scale / self.resize
-        b_landmarks = batched_decode_landm(b_landmarks, priors, self.cfg['variance']) * self.scale1 / self.resize
+        b_loc = batched_decode(
+            b_loc, priors, self.cfg['variance']) * self.scale / self.resize
+        b_landmarks = batched_decode_landm(
+            b_landmarks, priors, self.cfg['variance']) * self.scale1 / self.resize
         b_conf = b_conf[:, :, 1]
 
         # index for selection
@@ -360,7 +384,7 @@ class RetinaFace(nn.Cell):
         return final_bounding_boxes, final_landmarks
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
 
     model = RetinaFace()
     print(model)

@@ -16,7 +16,7 @@ class PriorBox(object):
         self.feature_maps = [[ceil(self.image_size[0] / step), ceil(self.image_size[1] / step)] for step in self.steps]
         self.name = 's'
 
-    def forward(self):
+    def construct(self):
         anchors = []
         for k, f in enumerate(self.feature_maps):
             min_sizes = self.min_sizes[k]
@@ -40,6 +40,9 @@ def py_cpu_nms(dets, thresh):
     """Pure Python NMS baseline."""
 
     nms = ops.NMSWithMask(thresh)
+
+    import pdb; pdb.set_trace()
+
     box_with_score = np.column_stack((dets[:, :4], dets[:, 4]))
     box_with_score_m = ms.Tensor(box_with_score)
 
@@ -348,7 +351,7 @@ def log_sum_exp(x):
     Args:
         x (Variable(tensor)): conf_preds from conf layers
     """
-    x_max = x.data.max()
+    x_max = x.max()
     return ops.log(ops.sum(ops.exp(x - x_max), 1, keepdim=True)) + x_max
 
 

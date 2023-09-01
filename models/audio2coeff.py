@@ -23,7 +23,7 @@ def load_cpk(checkpoint_path, model=None, optimizer=None):
 
 class Audio2Coeff():
 
-    def __init__(self, sadtalker_path, device):
+    def __init__(self, sadtalker_path):
         # load config
         fcfg_pose = open(sadtalker_path['audio2pose_yaml_path'])
         cfg_pose = CN.load_cfg(fcfg_pose)
@@ -52,7 +52,7 @@ class Audio2Coeff():
             sadtalker_path['audio2exp_checkpoint'], model=netG)
 
         self.audio2exp_model = Audio2Exp(
-            netG, cfg_exp, device=device, prepare_training_loss=False)
+            netG, cfg_exp, prepare_training_loss=False)
         self.audio2exp_model = self.audio2exp_model
         for param in self.audio2exp_model.get_parameters():
             param.requires_grad = False

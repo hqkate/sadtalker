@@ -418,7 +418,7 @@ class FAN(nn.Cell):
             inp.transpose((2, 0, 1)))).float()
         inp.div_(255.0).unsqueeze_(0)
 
-        outputs, _ = self.forward(inp)
+        outputs, _ = self.construct(inp)
         out = outputs[-1][:, :-1, :, :]
         heatmaps = out.asnumpy()
 

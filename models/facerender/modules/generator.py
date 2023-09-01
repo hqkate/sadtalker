@@ -90,7 +90,7 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
             deformation = deformation.permute(0, 4, 1, 2, 3)
             deformation = ops.interpolate(deformation, size=(d, h, w), mode='trilinear')
             deformation = deformation.permute(0, 2, 3, 4, 1)
-        return F.grid_sample(inp, deformation)
+        return ops.grid_sample(inp, deformation)
 
     def construct(self, source_image, kp_driving, kp_source):
         # Encoding (downsampling) part

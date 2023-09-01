@@ -1,8 +1,13 @@
 import os
 import sys
+import shutil
 from time import strftime
 from mindspore import context
 from utils.preprocess import CropAndExtract
+from utils.generate_batch import get_data
+from utils.generate_facerender_batch import get_facerender_data
+from models.audio2coeff import Audio2Coeff
+from models.facerender.animate import AnimateFromCoeff
 from argparse import ArgumentParser
 
 
@@ -26,7 +31,6 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
 
 
 def main(args):
-    # torch.backends.cudnn.enabled = False
     context.set_context(mode=context.GRAPH_MODE, device_target="Ascend", device_id=7)
 
     pic_path = args.source_image
@@ -48,6 +52,8 @@ def main(args):
 
     # init model
     preprocess_model = CropAndExtract(sadtalker_paths)
+    audio_to_coeff = Audio2Coeff(sadtalker_paths)
+    animate_from_coeff = AnimateFromCoeff(sadtalker_paths)
 
     # crop image and extract 3dmm from image
     first_frame_dir = os.path.join(save_dir, 'first_frame_dir')
@@ -83,6 +89,29 @@ def main(args):
                 ref_pose, ref_pose_frame_dir, args.preprocess, source_image_flag=False)
     else:
         ref_pose_coeff_path = None
+
+    #audio2ceoff
+    batch = get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=args.still)
+    coeff_path = audio_to_coeff.generate(batch, save_dir, pose_style, ref_pose_coeff_path)
+
+    # 3dface render
+    # if args.face3dvis:
+    #     from models.face3d.visualize import gen_composed_video
+    #     gen_composed_video(args, device, first_coeff_path, coeff_path, audio_path, os.path.join(save_dir, '3dface.mp4'))
+
+    #coeff2video
+    data = get_facerender_data(coeff_path, crop_pic_path, first_coeff_path, audio_path,
+                                batch_size, input_yaw_list, input_pitch_list, input_roll_list,
+                                expression_scale=args.expression_scale, still_mode=args.still, preprocess=args.preprocess, size=args.size)
+
+    result = animate_from_coeff.generate(data, save_dir, pic_path, crop_info, \
+                                enhancer=args.enhancer, background_enhancer=args.background_enhancer, preprocess=args.preprocess, img_size=args.size)
+
+    shutil.move(result, save_dir+'.mp4')
+    print('The generated video is named:', save_dir+'.mp4')
+
+    if not args.verbose:
+        shutil.rmtree(save_dir)
 
 
 if __name__ == '__main__':

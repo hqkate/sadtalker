@@ -8,9 +8,9 @@ from tqdm import tqdm
 def normalize_kp(kp_source, kp_driving, kp_driving_initial, adapt_movement_scale=False,
                  use_relative_movement=False, use_relative_jacobian=False):
     if adapt_movement_scale:
-        source_area = ConvexHull(kp_source['value'][0].data.numpy()).volume
+        source_area = ConvexHull(kp_source['value'][0].asnumpy()).volume
         driving_area = ConvexHull(
-            kp_driving_initial['value'][0].data.numpy()).volume
+            kp_driving_initial['value'][0].asnumpy()).volume
         adapt_movement_scale = np.sqrt(source_area) / np.sqrt(driving_area)
     else:
         adapt_movement_scale = 1

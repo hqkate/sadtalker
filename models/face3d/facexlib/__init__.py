@@ -58,20 +58,20 @@ def landmark_98_to_68(landmark_98):
 def init_detection_model(model_name, half=False, model_rootpath=None):
     if model_name == 'retinaface_resnet50':
         model = RetinaFace(network_name='resnet50', half=half)
-        model_path = 'detection_Resnet50_Final.pth'
+        model_path = 'checkpoints/ms/ms_det_retinaface.ckpt'
     elif model_name == 'retinaface_mobile0.25':
         model = RetinaFace(network_name='mobile0.25', half=half)
         model_path = 'detection_mobilenet0.25_Final.pth'
     else:
         raise NotImplementedError(f'{model_name} is not implemented.')
 
-    # param_dict = ms.load_checkpoint(model_path)
-    # # remove unnecessary 'module.'
-    # for k, v in deepcopy(param_dict).items():
-    #     if k.startswith('module.'):
-    #         param_dict[k[7:]] = v
-    #         param_dict.pop(k)
-    # ms.load_param_into_net(model, param_dict)
+    param_dict = ms.load_checkpoint(model_path)
+    # remove unnecessary 'module.'
+    for k, v in deepcopy(param_dict).items():
+        if k.startswith('module.'):
+            param_dict[k[7:]] = v
+            param_dict.pop(k)
+    ms.load_param_into_net(model, param_dict)
     model.set_train(False)
     return model
 

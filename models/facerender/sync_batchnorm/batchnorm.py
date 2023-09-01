@@ -119,8 +119,8 @@ class _SynchronizedBatchNorm(_BatchNorm):
         unbias_var = sumvar / (size - 1)
         bias_var = sumvar / size
 
-        self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.data
-        self.running_var = (1 - self.momentum) * self.running_var + self.momentum * unbias_var.data
+        self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
+        self.running_var = (1 - self.momentum) * self.running_var + self.momentum * unbias_var
 
         return mean, bias_var.clamp(self.eps) ** -0.5
 

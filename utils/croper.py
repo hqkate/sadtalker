@@ -11,6 +11,7 @@ import numpy as np
 from PIL import Image
 from tools.save_ms_params import save_params, set_params
 
+
 class Preprocesser:
     def __init__(self):
 
@@ -22,7 +23,7 @@ class Preprocesser:
         # save_params(det_net, "detnet_retinaface_params.txt")
 
         # detector = set_params(detector, "checkpoints/pt_weights/pt_weights_fan.pkl", "checkpoints/ms/ms_detector_fan.ckpt")
-        # det_net = set_params(det_net, "checkpoints/pt_weights/pt_weights_retinaface.pkl")
+        # det_net = set_params(det_net, "checkpoints/pt_weights/pt_weights_retinaface.pkl", "checkpoints/ms/ms_det_retinaface.ckpt")
 
         self.predictor = KeypointExtractor(detector, det_net)
 
@@ -135,6 +136,7 @@ class Preprocesser:
         return rsize, crop, [lx, ly, rx, ry]
 
     def crop(self, img_np_list, still=False, xsize=512):    # first frame for all video
+
         img_np = img_np_list[0]
         lm = self.get_landmark(img_np)
 
