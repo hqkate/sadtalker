@@ -2,7 +2,7 @@ from mindspore import nn, ops
 
 
 class Conv2d(nn.Cell):
-    def __init__(self, cin, cout, kernel_size, stride, padding, residual=False, use_act=True, *args, **kwargs):
+    def __init__(self, cin, cout, kernel_size, stride, padding, use_residual=False, use_act=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.conv_block = nn.SequentialCell(
             nn.Conv2d(cin, cout, kernel_size, stride, pad_mode='pad',
@@ -10,12 +10,12 @@ class Conv2d(nn.Cell):
             nn.BatchNorm2d(cout)
         )
         self.act = nn.ReLU()
-        self.residual = residual
+        self.use_residual = use_residual
         self.use_act = use_act
 
     def construct(self, x):
         out = self.conv_block(x)
-        if self.residual:
+        if self.use_residual:
             out += x
 
         if self.use_act:

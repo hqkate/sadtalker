@@ -1,6 +1,6 @@
 from mindspore import nn, ops
-from utils import SameBlock2d, DownBlock2d, ResBlock3d, SPADEResnetBlock
-from dense_motion import DenseMotionNetwork
+from models.facerender.modules.utils import SameBlock2d, DownBlock2d, ResBlock3d, SPADEResnetBlock
+from models.facerender.modules.dense_motion import DenseMotionNetwork
 
 
 class SPADEDecoder(nn.Cell):
@@ -56,13 +56,13 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
         else:
             self.dense_motion_network = None
 
-        self.first = SameBlock2d(image_channel, block_expansion, kernel_size=(3, 3), padding=(1, 1))
+        self.first = SameBlock2d(image_channel, block_expansion, kernel_size=(3, 3), padding=(1, 1, 1, 1))
 
         down_blocks = []
         for i in range(num_down_blocks):
             in_features = min(max_features, block_expansion * (2 ** i))
             out_features = min(max_features, block_expansion * (2 ** (i + 1)))
-            down_blocks.append(DownBlock2d(in_features, out_features, kernel_size=(3, 3), padding=(1, 1)))
+            down_blocks.append(DownBlock2d(in_features, out_features, kernel_size=(3, 3), padding=(1, 1, 1, 1)))
         self.down_blocks = nn.CellList(down_blocks)
 
         self.second = nn.Conv2d(in_channels=out_features, out_channels=max_features, kernel_size=1, stride=1)
@@ -72,10 +72,10 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
 
         self.resblocks_3d = nn.SequentialCell()
         for i in range(num_resblocks):
-            self.resblocks_3d.append('3dr' + str(i), ResBlock3d(reshape_channel, kernel_size=3, padding=1))
+            self.resblocks_3d.append(ResBlock3d(reshape_channel, kernel_size=3, padding=1))
 
         out_features = block_expansion * (2 ** (num_down_blocks))
-        self.third = SameBlock2d(max_features, out_features, kernel_size=(3, 3), padding=(1, 1), lrelu=True)
+        self.third = SameBlock2d(max_features, out_features, kernel_size=(3, 3), padding=(1, 1, 1, 1), lrelu=True)
         self.fourth = nn.Conv2d(in_channels=out_features, out_channels=out_features, kernel_size=1, stride=1)
 
         self.estimate_occlusion_map = estimate_occlusion_map

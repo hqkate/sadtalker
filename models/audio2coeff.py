@@ -33,14 +33,14 @@ class Audio2Coeff():
         cfg_exp.freeze()
 
         # load audio2pose_model
-        self.audio2pose_model = Audio2Pose(cfg_pose, None)
+        self.audio2pose_model = Audio2Pose(cfg_pose)
         self.audio2pose_model = self.audio2pose_model
         self.audio2pose_model.set_train(False)
         for param in self.audio2pose_model.get_parameters():
             param.requires_grad = False
 
-            load_cpk(sadtalker_path['audio2pose_checkpoint'],
-                     model=self.audio2pose_model)
+            # load_cpk(sadtalker_path['audio2pose_checkpoint'],
+            #          model=self.audio2pose_model)
 
         # load audio2exp_model
         netG = ExpNet()
@@ -48,8 +48,8 @@ class Audio2Coeff():
             netG.requires_grad = False
         netG.set_train(False)
 
-        load_cpk(
-            sadtalker_path['audio2exp_checkpoint'], model=netG)
+        # load_cpk(
+        #     sadtalker_path['audio2exp_checkpoint'], model=netG)
 
         self.audio2exp_model = Audio2Exp(
             netG, cfg_exp, prepare_training_loss=False)

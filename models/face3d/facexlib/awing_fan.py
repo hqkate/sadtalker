@@ -308,6 +308,7 @@ class FAN(nn.Cell):
                 out_channels=64,
                 kernel_size=7,
                 stride=2,
+                pad_mode='pad',
                 padding=3)
         else:
             self.conv1 = CoordConvTh(

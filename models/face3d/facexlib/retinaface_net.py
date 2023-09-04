@@ -29,7 +29,7 @@ def conv_bn1X1(inp, oup, stride, leaky=0):
 def conv_dw(inp, oup, stride, leaky=0.1):
     return nn.SequentialCell(
         nn.Conv2d(inp, inp, 3, stride, pad_mode='pad',
-                  padding=1, groups=inp, has_bias=False),
+                  padding=1, group=inp, has_bias=False),
         nn.BatchNorm2d(inp),
         nn.LeakyReLU(alpha=leaky),
         nn.Conv2d(inp, oup, 1, 1, padding=0, has_bias=False),

@@ -1,7 +1,7 @@
 import os
 import cv2
 from tqdm import tqdm
-from gfpgan import GFPGANer
+# from gfpgan import GFPGANer
 from utils.videoio import load_video_to_cv2
 
 

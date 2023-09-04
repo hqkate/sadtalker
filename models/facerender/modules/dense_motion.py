@@ -1,9 +1,10 @@
 from mindspore import nn, ops
-from utils import Hourglass, make_coordinate_grid, kp2gaussian
-from sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
+from models.facerender.modules.utils import Hourglass, make_coordinate_grid, kp2gaussian
+# from sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
+from mindspore.nn import BatchNorm3d
 
 
-class DenseMotionNetwork(nn.Module):
+class DenseMotionNetwork(nn.Cell):
     """
     Module that predicting a dense motion from sparse motion representation given by kp_source and kp_driving
     """
@@ -13,7 +14,7 @@ class DenseMotionNetwork(nn.Module):
         super(DenseMotionNetwork, self).__init__()
         self.hourglass = Hourglass(block_expansion=block_expansion, in_features=(num_kp+1)*(compress+1), max_features=max_features, num_blocks=num_blocks)
 
-        self.mask = nn.Conv3d(self.hourglass.out_filters, num_kp + 1, kernel_size=7, padding=3)
+        self.mask = nn.Conv3d(self.hourglass.out_filters, num_kp + 1, kernel_size=7, pad_mode='pad', padding=3)
 
         self.compress = nn.Conv3d(feature_channel, compress, kernel_size=1)
         self.norm = BatchNorm3d(compress, affine=True)

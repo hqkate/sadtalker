@@ -22,10 +22,10 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
         'dir_of_BFM_fitting': os.path.join(checkpoint_dir, 'BFM_Fitting'),
     }
     sadtalker_paths['audio2pose_yaml_path'] = os.path.join(
-        config_dir, 'auido2pose.yaml')
+        config_dir, 'audio2pose.yaml')
     sadtalker_paths['audio2exp_yaml_path'] = os.path.join(
-        config_dir, 'auido2exp.yaml')
-    # os.path.join(config_dir, 'auido2exp.yaml')
+        config_dir, 'audio2exp.yaml')
+    sadtalker_paths['facerender_yaml'] = os.path.join(config_dir, 'facerender.yaml')
     sadtalker_paths['use_safetensor'] = False
     return sadtalker_paths
 
@@ -53,14 +53,18 @@ def main(args):
     # init model
     preprocess_model = CropAndExtract(sadtalker_paths)
     audio_to_coeff = Audio2Coeff(sadtalker_paths)
-    animate_from_coeff = AnimateFromCoeff(sadtalker_paths)
+    # animate_from_coeff = AnimateFromCoeff(sadtalker_paths)
 
     # crop image and extract 3dmm from image
     first_frame_dir = os.path.join(save_dir, 'first_frame_dir')
     os.makedirs(first_frame_dir, exist_ok=True)
     print('3DMM Extraction for source image')
-    first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
-                                                                           source_image_flag=True, pic_size=args.size)
+    # first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
+    #                                                                        source_image_flag=True, pic_size=args.size)
+
+    first_coeff_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.mat"
+    crop_pic_path = "SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
+
     if first_coeff_path is None:
         print("Can't get the coeffs of the input")
         return
