@@ -15,8 +15,8 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
 
     sadtalker_paths = {
         'wav2lip_checkpoint': os.path.join(checkpoint_dir, 'wav2lip.pth'),
-        'audio2pose_checkpoint': os.path.join(checkpoint_dir, 'auido2pose_00140-model.pth'),
-        'audio2exp_checkpoint': os.path.join(checkpoint_dir, 'auido2exp_00300-model.pth'),
+        'audio2pose_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_audio2pose.ckpt'),
+        'audio2exp_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_audio2exp.ckpt'),
         'free_view_checkpoint': os.path.join(checkpoint_dir, 'facevid2vid_00189-model.pth.tar'),
         'path_of_net_recon_model': os.path.join(checkpoint_dir, 'ms/ms_net_recon.ckpt'),
         'dir_of_BFM_fitting': os.path.join(checkpoint_dir, 'BFM_Fitting'),
@@ -63,7 +63,7 @@ def main(args):
     #                                                                        source_image_flag=True, pic_size=args.size)
 
     first_coeff_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.mat"
-    crop_pic_path = "SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
+    crop_pic_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
 
     if first_coeff_path is None:
         print("Can't get the coeffs of the input")

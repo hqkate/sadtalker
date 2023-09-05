@@ -6,7 +6,7 @@ class Conv2d(nn.Cell):
         super().__init__(*args, **kwargs)
         self.conv_block = nn.SequentialCell(
             nn.Conv2d(cin, cout, kernel_size, stride,
-                      pad_mode='pad', padding=padding),
+                      pad_mode='pad', padding=padding, has_bias=True),
             nn.BatchNorm2d(cout)
         )
         self.act = nn.ReLU()

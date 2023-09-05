@@ -7,13 +7,13 @@ class ResUNet(nn.Cell):
         super(ResUNet, self).__init__()
 
         self.input_layer = nn.SequentialCell(
-            nn.Conv2d(channel, filters[0], kernel_size=3, pad_mode='pad', padding=1),
+            nn.Conv2d(channel, filters[0], kernel_size=3, pad_mode='pad', padding=1, has_bias=True),
             nn.BatchNorm2d(filters[0]),
             nn.ReLU(),
-            nn.Conv2d(filters[0], filters[0], kernel_size=3, pad_mode='pad', padding=1),
+            nn.Conv2d(filters[0], filters[0], kernel_size=3, pad_mode='pad', padding=1, has_bias=True),
         )
         self.input_skip = nn.SequentialCell(
-            nn.Conv2d(channel, filters[0], kernel_size=3, pad_mode='pad', padding=1)
+            nn.Conv2d(channel, filters[0], kernel_size=3, pad_mode='pad', padding=1, has_bias=True)
         )
 
         self.residual_conv_1 = ResidualConv(filters[0], filters[1], stride=(2,1), padding=1)
@@ -31,7 +31,7 @@ class ResUNet(nn.Cell):
         self.up_residual_conv3 = ResidualConv(filters[1] + filters[0], filters[0], stride=1, padding=1)
 
         self.output_layer = nn.SequentialCell(
-            nn.Conv2d(filters[0], 1, 1, 1),
+            nn.Conv2d(filters[0], 1, 1, 1, has_bias=True),
             nn.Sigmoid(),
         )
 

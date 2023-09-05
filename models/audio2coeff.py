@@ -10,15 +10,14 @@ from models.audio2pose.audio2pose import Audio2Pose
 from models.audio2exp.audio2exp import Audio2Exp
 from models.audio2exp.expnet import ExpNet
 
+# from tools.save_ms_params import save_params, set_params
 
-def load_cpk(checkpoint_path, model=None, optimizer=None):
-    checkpoint = ms.load_checkpoint(checkpoint_path)
-    if model is not None:
-        ms.load_param_into_net(model, checkpoint['model'])
-    if optimizer is not None:
-        ms.load_param_into_net(optimizer, checkpoint['optimizer'])
 
-    return checkpoint['epoch']
+def load_cpk(checkpoint_path, model):
+    param_dict = ms.load_checkpoint(checkpoint_path)
+    ms.load_param_into_net(model, param_dict)
+
+    return model
 
 
 class Audio2Coeff():
@@ -39,8 +38,8 @@ class Audio2Coeff():
         for param in self.audio2pose_model.get_parameters():
             param.requires_grad = False
 
-            # load_cpk(sadtalker_path['audio2pose_checkpoint'],
-            #          model=self.audio2pose_model)
+        load_cpk(sadtalker_path['audio2pose_checkpoint'],
+                 model=self.audio2pose_model)
 
         # load audio2exp_model
         netG = ExpNet()
@@ -48,8 +47,8 @@ class Audio2Coeff():
             netG.requires_grad = False
         netG.set_train(False)
 
-        # load_cpk(
-        #     sadtalker_path['audio2exp_checkpoint'], model=netG)
+        load_cpk(
+            sadtalker_path['audio2exp_checkpoint'], model=netG)
 
         self.audio2exp_model = Audio2Exp(
             netG, cfg_exp, prepare_training_loss=False)

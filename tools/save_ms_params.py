@@ -17,7 +17,11 @@ def set_params(model, pt_weights_path, save_path=None):
         pt_weights = pickle.load(f)
 
     for i, ms_param in enumerate(model.trainable_params()):
-        ms_param.set_data(ms.Tensor(pt_weights[i], dtype=ms.float32))
+        if len(ms_param.shape) == len(pt_weights[i].shape):
+            ms_param.set_data(ms.Tensor(pt_weights[i], dtype=ms.float32))
+        else:
+            ms_weight = ms.Tensor(pt_weights[i], dtype=ms.float32).unsqueeze(2)
+            ms_param.set_data(ms_weight)
 
     if save_path:
         ms.save_checkpoint(model, save_path)
