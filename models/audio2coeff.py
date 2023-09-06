@@ -10,8 +10,6 @@ from models.audio2pose.audio2pose import Audio2Pose
 from models.audio2exp.audio2exp import Audio2Exp
 from models.audio2exp.expnet import ExpNet
 
-# from tools.save_ms_params import save_params, set_params
-
 
 def load_cpk(checkpoint_path, model):
     param_dict = ms.load_checkpoint(checkpoint_path)
@@ -33,28 +31,30 @@ class Audio2Coeff():
 
         # load audio2pose_model
         self.audio2pose_model = Audio2Pose(cfg_pose)
-        self.audio2pose_model = self.audio2pose_model
-        self.audio2pose_model.set_train(False)
-        for param in self.audio2pose_model.get_parameters():
-            param.requires_grad = False
 
         load_cpk(sadtalker_path['audio2pose_checkpoint'],
                  model=self.audio2pose_model)
 
+        for param in self.audio2pose_model.get_parameters():
+            param.requires_grad = False
+
         # load audio2exp_model
         netG = ExpNet()
+
         for param in netG.get_parameters():
             netG.requires_grad = False
         netG.set_train(False)
 
-        load_cpk(
-            sadtalker_path['audio2exp_checkpoint'], model=netG)
-
         self.audio2exp_model = Audio2Exp(
             netG, cfg_exp, prepare_training_loss=False)
-        self.audio2exp_model = self.audio2exp_model
+
+        load_cpk(
+            sadtalker_path['audio2exp_checkpoint'], model=self.audio2exp_model)
+
         for param in self.audio2exp_model.get_parameters():
             param.requires_grad = False
+
+        self.audio2pose_model.set_train(False)
         self.audio2exp_model.set_train(False)
 
     def generate(self, batch, coeff_save_dir, pose_style, ref_pose_coeff_path=None):
@@ -79,9 +79,10 @@ class Audio2Coeff():
             pose_pred = ms.Tensor(savgol_filter(
                 np.array(pose_pred), 13, 2, axis=1))
 
+        pose_pred = ops.Cast()(pose_pred, exp_pred.dtype)
         coeffs_pred = ops.cat((exp_pred, pose_pred), axis=-1)  # bs T 70
 
-        coeffs_pred_numpy = coeffs_pred[0].clone().numpy()
+        coeffs_pred_numpy = coeffs_pred[0].asnumpy()
 
         if ref_pose_coeff_path is not None:
             coeffs_pred_numpy = self.using_refpose(

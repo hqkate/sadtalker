@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
@@ -138,7 +139,7 @@ class Decoder(nn.Cell):
         class_bias = self.classbias[class_id]  # bs latent_size
 
         z = z + class_bias
-        z = ops.Cast()(z, ms.float16)
+        z = ops.Cast()(z, ref.dtype)
         x_in = ops.cat([ref, z, audio_out], axis=-1)
         # bs layer_sizes[-1]
         x_out = self.mlp(x_in)

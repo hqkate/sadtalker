@@ -7,7 +7,7 @@ import scipy.io as scio
 
 
 def get_facerender_data(coeff_path, pic_path, first_coeff_path, audio_path,
-                        batch_size, input_yaw_list=None, input_pitch_list=None, input_roll_list=None,
+                        batch_size, input_yaw_list=None, input_pitch_lisret=None, input_roll_list=None,
                         expression_scale=1.0, still_mode=False, preprocess='crop', size=256):
 
     semantic_radius = 13
@@ -22,7 +22,7 @@ def get_facerender_data(coeff_path, pic_path, first_coeff_path, audio_path,
     source_image = transform.resize(source_image, (size, size, 3))
     source_image = source_image.transpose((2, 0, 1))
     source_image_ts = ms.Tensor(source_image).unsqueeze(0)
-    source_image_ts = source_image_ts.repeat(batch_size, 1, 1, 1)
+    source_image_ts = source_image_ts.repeat(batch_size, axis=0)
     data['source_image'] = source_image_ts
 
     source_semantics_dict = scio.loadmat(first_coeff_path)
@@ -39,7 +39,7 @@ def get_facerender_data(coeff_path, pic_path, first_coeff_path, audio_path,
     source_semantics_new = transform_semantic_1(
         source_semantics, semantic_radius)
     source_semantics_ts = ms.Tensor(source_semantics_new).unsqueeze(0)
-    source_semantics_ts = source_semantics_ts.repeat(batch_size, 1, 1)
+    source_semantics_ts = source_semantics_ts.repeat(batch_size, axis=0)
     data['source_semantics'] = source_semantics_ts
 
     # target

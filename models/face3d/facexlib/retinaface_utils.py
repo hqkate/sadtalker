@@ -41,8 +41,6 @@ def py_cpu_nms(dets, thresh):
 
     nms = ops.NMSWithMask(thresh)
 
-    import pdb; pdb.set_trace()
-
     box_with_score = np.column_stack((dets[:, :4], dets[:, 4]))
     box_with_score_m = ms.Tensor(box_with_score)
 

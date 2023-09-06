@@ -1,4 +1,4 @@
-import mindspore
+import mindspore as ms
 from mindspore import nn, ops
 from models.audio2pose.cvae import CVAE
 from models.audio2pose.discriminator import PoseSequenceDiscriminator
@@ -62,11 +62,13 @@ class Audio2Pose(nn.Cell):
         #
         div = num_frames // self.seq_len
         re = num_frames % self.seq_len
-        audio_emb_list = []
-        pose_motion_pred_list = [ops.zeros(batch['ref'].unsqueeze(1).shape, dtype=batch['ref'].dtype)]
+
+        pose_motion_pred_list = [
+            ops.zeros(batch['ref'].unsqueeze(1).shape, dtype=batch['ref'].dtype)]
 
         for i in range(div):
             z = ops.randn(bs, self.latent_dim)
+            # z = ops.zeros((bs, self.latent_dim), ms.float32) # for debug
             batch['z'] = z
             audio_emb = self.audio_encoder(
                 indiv_mels_use[:, i*self.seq_len:(i+1)*self.seq_len, :, :, :])  # bs seq_len 512
@@ -77,6 +79,7 @@ class Audio2Pose(nn.Cell):
 
         if re != 0:
             z = ops.randn(bs, self.latent_dim)
+            # z = ops.zeros((bs, self.latent_dim), ms.float32) # for debug
             batch['z'] = z
             audio_emb = self.audio_encoder(
                 indiv_mels_use[:, -1*self.seq_len:, :, :, :])  # bs seq_len  512

@@ -7,7 +7,7 @@ class Conv2d(nn.Cell):
         self.conv_block = nn.SequentialCell(
             nn.Conv2d(cin, cout, kernel_size, stride,
                       pad_mode='pad', padding=padding, has_bias=True),
-            nn.BatchNorm2d(cout)
+            nn.BatchNorm2d(cout, momentum=0.9)
         )
         self.act = nn.ReLU()
         self.residual = residual

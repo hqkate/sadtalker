@@ -1,5 +1,7 @@
 from mindspore import nn, ops
-
+import mindspore as ms
+import numpy as np
+import logging
 
 class Conv2d(nn.Cell):
     def __init__(self, cin, cout, kernel_size, stride, padding, use_residual=False, use_act=True, *args, **kwargs):
@@ -7,7 +9,7 @@ class Conv2d(nn.Cell):
         self.conv_block = nn.SequentialCell(
             nn.Conv2d(cin, cout, kernel_size, stride, pad_mode='pad',
                       padding=padding, has_bias=True),
-            nn.BatchNorm2d(cout)
+            nn.BatchNorm2d(cout, momentum=0.9)
         )
         self.act = nn.ReLU()
         self.use_residual = use_residual
@@ -61,6 +63,7 @@ class ExpNet(nn.Cell):
         self.mapping1 = nn.Dense(512+64+1, 64, bias_init="zeros")
 
     def construct(self, x, ref, ratio):
+
         x = self.audio_encoder(x).view(x.shape[0], -1)
         ref_reshape = ref.reshape(x.shape[0], -1)
         ratio = ratio.reshape(x.shape[0], -1)

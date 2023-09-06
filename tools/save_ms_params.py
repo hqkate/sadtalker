@@ -1,6 +1,6 @@
 def save_params(model, out_path):
     param_list = []
-    for param in model.trainable_params():
+    for param in model.get_parameters():
         line = param.name + "#" + \
             str(param.dtype) + "#" + str(tuple(param.shape))
         param_list.append(line)
@@ -16,7 +16,7 @@ def set_params(model, pt_weights_path, save_path=None):
     with open(pt_weights_path, 'rb') as f:
         pt_weights = pickle.load(f)
 
-    for i, ms_param in enumerate(model.trainable_params()):
+    for i, ms_param in enumerate(model.get_parameters()):
         if len(ms_param.shape) == len(pt_weights[i].shape):
             ms_param.set_data(ms.Tensor(pt_weights[i], dtype=ms.float32))
         else:
