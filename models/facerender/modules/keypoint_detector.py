@@ -99,7 +99,7 @@ class HEEstimator(nn.Cell):
 
         self.block1 = nn.SequentialCell()
         for i in range(3):
-            self.block1.append('b1_'+ str(i), ResBottleneck(in_features=256, stride=1))
+            self.block1.append(ResBottleneck(in_features=256, stride=1))
 
         self.conv3 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=1)
         self.norm3 = BatchNorm2d(512, affine=True)
@@ -107,7 +107,7 @@ class HEEstimator(nn.Cell):
 
         self.block3 = nn.SequentialCell()
         for i in range(3):
-            self.block3.append('b3_'+ str(i), ResBottleneck(in_features=512, stride=1))
+            self.block3.append(ResBottleneck(in_features=512, stride=1))
 
         self.conv4 = nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=1)
         self.norm4 = BatchNorm2d(1024, affine=True)
@@ -115,7 +115,7 @@ class HEEstimator(nn.Cell):
 
         self.block5 = nn.SequentialCell()
         for i in range(5):
-            self.block5.append('b5_'+ str(i), ResBottleneck(in_features=1024, stride=1))
+            self.block5.append(ResBottleneck(in_features=1024, stride=1))
 
         self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
         self.norm5 = BatchNorm2d(2048, affine=True)
@@ -123,7 +123,7 @@ class HEEstimator(nn.Cell):
 
         self.block7 = nn.SequentialCell()
         for i in range(2):
-            self.block7.append('b7_'+ str(i), ResBottleneck(in_features=2048, stride=1))
+            self.block7.append(ResBottleneck(in_features=2048, stride=1))
 
         self.fc_roll = nn.Dense(2048, num_bins)
         self.fc_pitch = nn.Dense(2048, num_bins)

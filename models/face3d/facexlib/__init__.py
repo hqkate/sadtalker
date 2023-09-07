@@ -59,9 +59,6 @@ def init_detection_model(model_name, half=False, model_rootpath=None):
     if model_name == 'retinaface_resnet50':
         model = RetinaFace(network_name='resnet50', half=half)
         model_path = 'checkpoints/ms/ms_det_retinaface.ckpt'
-    elif model_name == 'retinaface_mobile0.25':
-        model = RetinaFace(network_name='mobile0.25', half=half)
-        model_path = 'detection_mobilenet0.25_Final.pth'
     else:
         raise NotImplementedError(f'{model_name} is not implemented.')
 

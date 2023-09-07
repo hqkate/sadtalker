@@ -85,7 +85,7 @@ class Audio2Pose(nn.Cell):
                 indiv_mels_use[:, -1*self.seq_len:, :, :, :])  # bs seq_len  512
             if audio_emb.shape[1] != self.seq_len:
                 pad_dim = self.seq_len-audio_emb.shape[1]
-                pad_audio_emb = audio_emb[:, :1].repeat(1, pad_dim, 1)
+                pad_audio_emb = audio_emb[:, :1].repeat(pad_dim, axis=1)
                 audio_emb = ops.cat([pad_audio_emb, audio_emb], 1)
             batch['audio_emb'] = audio_emb
             batch = self.netG.test(batch)

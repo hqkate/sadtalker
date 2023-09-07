@@ -1,3 +1,4 @@
+import mindspore as ms
 from mindspore import nn, ops
 from mindspore import dtype as mstype
 
@@ -6,12 +7,6 @@ from mindspore import dtype as mstype
 
 from mindspore.nn import BatchNorm2d, BatchNorm3d
 from models.facerender.modules.spectralnorm import Conv2dNormalized
-
-
-def func_conv2d():
-    """Mindspore implementation of `torch.nn.functional.conv2d`
-    """
-    pass
 
 
 def einsum():
@@ -54,9 +49,13 @@ def make_coordinate_grid(spatial_size, type):
     y = (2 * (y / (h - 1)) - 1)
     z = (2 * (z / (d - 1)) - 1)
 
-    yy = y.view(1, -1, 1).repeat(d, 1, w)
-    xx = x.view(1, 1, -1).repeat(d, h, 1)
-    zz = z.view(-1, 1, 1).repeat(1, h, w)
+    # yy = y.view(1, -1, 1).repeat(d, 1, w)
+    # xx = x.view(1, 1, -1).repeat(d, h, 1)
+    # zz = z.view(-1, 1, 1).repeat(1, h, w)
+
+    yy = y.view(1, -1, 1).repeat(d, axis=0).repeat(w, axis=2)
+    xx = x.view(1, 1, -1).repeat(d, axis=0).repeat(h, axis=1)
+    zz = z.view(-1, 1, 1).repeat(h, axis=1).repeat(w, axis=2)
 
     meshed = ops.cat([xx.unsqueeze_(3), yy.unsqueeze_(3), zz.unsqueeze_(3)], 3)
 
@@ -121,7 +120,9 @@ class UpBlock3d(nn.Cell):
         self.norm = BatchNorm3d(out_features, affine=True)
 
     def construct(self, x):
-        out = ops.interpolate(x, scale_factor=(1, 2, 2))
+        print(x)
+        out = ops.interpolate(x, scale_factor=(1.0, 2.0, 2.0), )
+        print(out)
         out = self.conv(out)
         out = self.norm(out)
         out = ops.relu(out)
@@ -408,12 +409,7 @@ class AntiAliasInterpolation2d(nn.Cell):
         # The gaussian kernel is the product of the
         # gaussian function of each dimension.
         kernel = 1
-        meshgrids = ops.meshgrid(
-            [
-                ops.arange(size, dtype=mstype.float32)
-                for size in kernel_size
-            ]
-        )
+        meshgrids = ops.Meshgrid()(tuple([ops.arange(size, dtype=mstype.float32) for size in kernel_size]))
         for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
             mean = (size - 1) / 2
             kernel *= ops.exp(-(mgrid - mean) ** 2 / (2 * std ** 2))
@@ -421,10 +417,12 @@ class AntiAliasInterpolation2d(nn.Cell):
         # Make sure sum of values in gaussian kernel equals 1.
         kernel = kernel / ops.sum(kernel)
         # Reshape to depthwise convolutional weight
-        kernel = kernel.view(1, 1, *kernel.size())
-        kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+        kernel = kernel.view(1, 1, *kernel.shape)
+        # kernel = kernel.repeat([channels, *[1] * (kernel.dim() - 1)])
+        kernel = kernel.repeat(channels, axis=0)
 
-        self.register_buffer('weight', kernel)
+        # self.register_buffer('weight', kernel) ## TODO: requires_grad=False!!!
+        self.weight = ms.Parameter(kernel, requires_grad=False)
         self.groups = channels
         self.scale = scale
         inv_scale = 1 / scale
@@ -435,7 +433,7 @@ class AntiAliasInterpolation2d(nn.Cell):
             return input
 
         out = ops.pad(input, (self.ka, self.kb, self.ka, self.kb))
-        out = func_conv2d(out, weight=self.weight, groups=self.groups)  # TODO
+        out = ops.conv2d(out, weight=self.weight, groups=self.groups)  # TODO
         out = out[:, :, ::self.int_inv_scale, ::self.int_inv_scale]
 
         return out

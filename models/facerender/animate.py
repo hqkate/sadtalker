@@ -79,22 +79,22 @@ class AnimateFromCoeff():
 
         for param in generator.get_parameters():
             param.requires_grad = False
-        for param in kp_extractor.parameters():
+        for param in kp_extractor.get_parameters():
             param.requires_grad = False
-        for param in he_estimator.parameters():
+        for param in he_estimator.get_parameters():
             param.requires_grad = False
-        for param in mapping.parameters():
+        for param in mapping.get_parameters():
             param.requires_grad = False
 
-        if sadtalker_path is not None:
-            load_cpk_facevid2vid(sadtalker_path['free_view_checkpoint'], kp_detector=kp_extractor, generator=generator, he_estimator=he_estimator)
-        else:
-            raise AttributeError("Checkpoint should be specified for video head pose estimator.")
+        # if sadtalker_path is not None:
+        #     load_cpk_facevid2vid(sadtalker_path['free_view_checkpoint'], kp_detector=kp_extractor, generator=generator, he_estimator=he_estimator)
+        # else:
+        #     raise AttributeError("Checkpoint should be specified for video head pose estimator.")
 
-        if  sadtalker_path['mappingnet_checkpoint'] is not None:
-            load_cpk_mapping(sadtalker_path['mappingnet_checkpoint'], mapping=mapping)
-        else:
-            raise AttributeError("Checkpoint should be specified for video head pose estimator.")
+        # if  sadtalker_path['mappingnet_checkpoint'] is not None:
+        #     load_cpk_mapping(sadtalker_path['mappingnet_checkpoint'], mapping=mapping)
+        # else:
+        #     raise AttributeError("Checkpoint should be specified for video head pose estimator.")
 
         self.kp_extractor = kp_extractor
         self.generator = generator
@@ -108,22 +108,20 @@ class AnimateFromCoeff():
 
     def generate(self, x, video_save_dir, pic_path, crop_info, enhancer=None, background_enhancer=None, preprocess='crop', img_size=256):
 
-        source_image=x['source_image'].astype(ms.Tensor)
-        source_semantics=x['source_semantics'].astype(ms.Tensor)
-        target_semantics=x['target_semantics_list'].astype(ms.Tensor)
-        source_image=source_image.to(self.device)
-        source_semantics=source_semantics.to(self.device)
-        target_semantics=target_semantics.to(self.device)
+        source_image = x['source_image']
+        source_semantics = x['source_semantics']
+        target_semantics = x['target_semantics_list']
+
         if 'yaw_c_seq' in x:
-            yaw_c_seq = x['yaw_c_seq'].astype(ms.Tensor)
+            yaw_c_seq = x['yaw_c_seq']
         else:
             yaw_c_seq = None
         if 'pitch_c_seq' in x:
-            pitch_c_seq = x['pitch_c_seq'].astype(ms.Tensor)
+            pitch_c_seq = x['pitch_c_seq']
         else:
             pitch_c_seq = None
         if 'roll_c_seq' in x:
-            roll_c_seq = x['roll_c_seq'].astype(ms.Tensor)
+            roll_c_seq = x['roll_c_seq']
         else:
             roll_c_seq = None
 

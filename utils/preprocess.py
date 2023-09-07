@@ -89,6 +89,8 @@ class CropAndExtract():
         x_full_frames = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                          for frame in full_frames]
 
+        print("start cropping the image ...")
+
         # crop images as the
         if 'crop' in crop_or_resize.lower():  # default crop
             x_full_frames, crop, quad = self.propress.crop(
@@ -120,6 +122,10 @@ class CropAndExtract():
         for frame in frames_pil:
             cv2.imwrite(png_path, cv2.cvtColor(
                 np.array(frame), cv2.COLOR_RGB2BGR))
+
+        print(f"finished cropping the image and saved to file {png_path}.")
+
+        import pdb; pdb.set_trace()
 
         # 2. get the landmark according to the detected face.
         if not os.path.isfile(landmarks_path):

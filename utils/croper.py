@@ -19,12 +19,6 @@ class Preprocesser:
         det_net = init_detection_model(
             'retinaface_resnet50', half=False)
 
-        # save_params(detector, "detector_fan_params2.txt")
-        # save_params(det_net, "detnet_retinaface_params.txt")
-
-        # detector = set_params(detector, "checkpoints/pt_weights/pt_weights_fan.pkl", "checkpoints/ms/ms_detector_fan.ckpt")
-        # det_net = set_params(det_net, "checkpoints/pt_weights/pt_weights_retinaface.pkl", "checkpoints/ms/ms_det_retinaface.ckpt")
-
         self.predictor = KeypointExtractor(detector, det_net)
 
     def get_landmark(self, img_np):

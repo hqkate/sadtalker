@@ -44,10 +44,10 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
                 ms_value = pt_params[ms_param.name]
                 new_params_list.append(
                     {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32)})
-            elif "netD_motion.seq" in ms_param.name:
-                ms_value = pt_params[ms_param.name]
-                new_params_list.append(
-                    {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(2)})
+            # elif "netD_motion.seq" in ms_param.name:
+            #     ms_value = pt_params[ms_param.name]
+            #     new_params_list.append(
+            #         {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(2)})
             else:
                 print(ms_param.name, "not match in pt_params")
     # 保存成MindSpore的checkpoint
@@ -99,7 +99,45 @@ def convert_audio2pose():
                   "checkpoints/ms/ms_audio2pose.ckpt", extra_dict)
 
 
+def convert_netrecon():
+    from models.face3d.networks import define_net_recon
+
+    net = define_net_recon(net_recon='resnet50',
+                           use_last_fc=False, init_path='')
+    ms_params = net.get_parameters()
+
+    with open("../SadTalker/pt_weights_net_recon.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict, "checkpoints/ms/ms_net_recon.ckpt")
+
+
+def convert_retinaface():
+    from models.face3d.facexlib import init_detection_model
+
+    det_net = init_detection_model('retinaface_resnet50', half=False)
+    ms_params = det_net.get_parameters()
+
+    with open("../SadTalker/pt_weights_retinaface.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_det_retinaface.ckpt")
+
+
+def convert_awingfan():
+    from models.face3d.facexlib import init_alignment_model
+    detector = init_alignment_model('awing_fan')
+    ms_params = detector.get_parameters()
+
+    with open("../SadTalker/pt_weights_fan.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_detector_fan.ckpt")
+
+
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
                         device_target="Ascend", device_id=6)
-    convert_audio2pose()
+    convert_awingfan()

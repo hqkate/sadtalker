@@ -33,7 +33,7 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
     return sadtalker_paths
 
 
-def read_batch_from_pkl(data_file):
+def read_batch_from_pkl(data_file, convert2ts=True):
     import pickle
     import mindspore as ms
     import numpy as np
@@ -41,9 +41,10 @@ def read_batch_from_pkl(data_file):
     with open(data_file, 'rb') as handle:
         data = pickle.load(handle)
 
-    for k, v in data.items():
-        if isinstance(v, np.ndarray):
-            data[k] = ms.Tensor(v, ms.float32)
+    if convert2ts:
+        for k, v in data.items():
+            if isinstance(v, np.ndarray):
+                data[k] = ms.Tensor(v, ms.float32)
 
     return data
 
@@ -72,7 +73,7 @@ def main(args):
     # init model
     preprocess_model = CropAndExtract(sadtalker_paths)
     audio_to_coeff = Audio2Coeff(sadtalker_paths)
-    # animate_from_coeff = AnimateFromCoeff(sadtalker_paths)
+    animate_from_coeff = AnimateFromCoeff(sadtalker_paths)
 
     auto_mixed_precision(audio_to_coeff.audio2exp_model, "O0")
     auto_mixed_precision(audio_to_coeff.audio2pose_model, "O0")
@@ -81,11 +82,11 @@ def main(args):
     first_frame_dir = os.path.join(save_dir, 'first_frame_dir')
     os.makedirs(first_frame_dir, exist_ok=True)
     print('3DMM Extraction for source image')
-    # first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
-    #                                                                        source_image_flag=True, pic_size=args.size)
+    first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
+                                                                           source_image_flag=True, pic_size=args.size)
 
-    first_coeff_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.mat"
-    crop_pic_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
+    # first_coeff_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.mat"
+    # crop_pic_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
 
     if first_coeff_path is None:
         print("Can't get the coeffs of the input")
@@ -130,9 +131,12 @@ def main(args):
     #     gen_composed_video(args, device, first_coeff_path, coeff_path, audio_path, os.path.join(save_dir, '3dface.mp4'))
 
     # coeff2video
-    data = get_facerender_data(coeff_path, crop_pic_path, first_coeff_path, audio_path,
-                               batch_size, input_yaw_list, input_pitch_list, input_roll_list,
-                               expression_scale=args.expression_scale, still_mode=args.still, preprocess=args.preprocess, size=args.size)
+    # data = get_facerender_data(coeff_path, crop_pic_path, first_coeff_path, audio_path,
+    #                            batch_size, input_yaw_list, input_pitch_list, input_roll_list,
+    #                            expression_scale=args.expression_scale, still_mode=args.still, preprocess=args.preprocess, size=args.size)
+
+    data = read_batch_from_pkl("../SadTalker/facerender_data.pkl")
+    crop_info = read_batch_from_pkl("../SadTalker/crop_info.pkl", convert2ts=False)
 
     result = animate_from_coeff.generate(data, save_dir, pic_path, crop_info,
                                          enhancer=args.enhancer, background_enhancer=args.background_enhancer, preprocess=args.preprocess, img_size=args.size)

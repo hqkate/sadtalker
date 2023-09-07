@@ -1,7 +1,7 @@
 import mindspore as ms
 from mindspore import nn
 import numpy as np
-import tqdm
+from tqdm import tqdm
 import time
 import os
 
@@ -15,6 +15,7 @@ class KeypointExtractor():
         self.det_net = det_net
 
     def extract_keypoint(self, images, name=None, info=True):
+        keypoints = []
         if isinstance(images, list):
             keypoints = []
             if info:

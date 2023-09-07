@@ -117,20 +117,10 @@ class RetinaFace(nn.Cell):
             self.half()
 
     def construct(self, inputs):
-        # outputs = self.body(inputs)
-
-        out1 = np.load("../SadTalker/retinaface_body_out_1.npy")
-        out2 = np.load("../SadTalker/retinaface_body_out_2.npy")
-        out3 = np.load("../SadTalker/retinaface_body_out_3.npy")
-
-        print(out1)
-
-        outputs = [ms.Tensor(out1), ms.Tensor(out2), ms.Tensor(out3)]
+        outputs = self.body(inputs)
 
         # FPN
         fpn = self.fpn(outputs)
-
-        print(fpn[0])
 
         # SSH
         feature1 = self.ssh1(fpn[0])

@@ -36,7 +36,8 @@ class DenseMotionNetwork(nn.Cell):
         if 'jacobian' in kp_driving and kp_driving['jacobian'] is not None:
             jacobian = ops.matmul(kp_source['jacobian'], ops.inverse(kp_driving['jacobian']))
             jacobian = jacobian.unsqueeze(-3).unsqueeze(-3).unsqueeze(-3)
-            jacobian = jacobian.repeat(1, 1, d, h, w, 1, 1)
+            # jacobian = jacobian.repeat(1, 1, d, h, w, 1, 1)
+            jacobian = jacobian.repeat(d, axis=2).repeat(h, axis=3).repeat(w, axis=4)
             coordinate_grid = ops.matmul(jacobian, coordinate_grid.unsqueeze(-1))
             coordinate_grid = coordinate_grid.squeeze(-1)
 
@@ -44,7 +45,7 @@ class DenseMotionNetwork(nn.Cell):
         driving_to_source = coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 1, 3)    # (bs, num_kp, d, h, w, 3)
 
         #adding background feature
-        identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1, 1)
+        identity_grid = identity_grid.repeat(bs, axis=0)
         sparse_motions = ops.cat([identity_grid, driving_to_source], axis=1)                #bs num_kp+1 d h w 3
 
         # sparse_motions = driving_to_source
@@ -53,7 +54,7 @@ class DenseMotionNetwork(nn.Cell):
 
     def create_deformed_feature(self, feature, sparse_motions):
         bs, _, d, h, w = feature.shape
-        feature_repeat = feature.unsqueeze(1).unsqueeze(1).repeat(1, self.num_kp+1, 1, 1, 1, 1, 1)      # (bs, num_kp+1, 1, c, d, h, w)
+        feature_repeat = feature.unsqueeze(1).unsqueeze(1).repeat(self.num_kp+1, axis=1)      # (bs, num_kp+1, 1, c, d, h, w)
         feature_repeat = feature_repeat.view(bs * (self.num_kp+1), -1, d, h, w)                         # (bs*(num_kp+1), c, d, h, w)
         sparse_motions = sparse_motions.view((bs * (self.num_kp+1), d, h, w, -1))                       # (bs*(num_kp+1), d, h, w, 3) !!!!
         sparse_deformed = ops.grid_sample(feature_repeat, sparse_motions)

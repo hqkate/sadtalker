@@ -1,7 +1,7 @@
 import numpy as np
 import mindspore as ms
 from mindspore import ops
-from itertools import product as product
+from itertools import product, compress
 from math import ceil
 
 
@@ -13,7 +13,8 @@ class PriorBox(object):
         self.steps = cfg['steps']
         self.clip = cfg['clip']
         self.image_size = image_size
-        self.feature_maps = [[ceil(self.image_size[0] / step), ceil(self.image_size[1] / step)] for step in self.steps]
+        self.feature_maps = [
+            [ceil(self.image_size[0] / step), ceil(self.image_size[1] / step)] for step in self.steps]
         self.name = 's'
 
     def construct(self):
@@ -24,8 +25,10 @@ class PriorBox(object):
                 for min_size in min_sizes:
                     s_kx = min_size / self.image_size[1]
                     s_ky = min_size / self.image_size[0]
-                    dense_cx = [x * self.steps[k] / self.image_size[1] for x in [j + 0.5]]
-                    dense_cy = [y * self.steps[k] / self.image_size[0] for y in [i + 0.5]]
+                    dense_cx = [x * self.steps[k] / self.image_size[1]
+                                for x in [j + 0.5]]
+                    dense_cy = [y * self.steps[k] / self.image_size[0]
+                                for y in [i + 0.5]]
                     for cy, cx in product(dense_cy, dense_cx):
                         anchors += [cx, cy, s_kx, s_ky]
 
@@ -44,9 +47,11 @@ def py_cpu_nms(dets, thresh):
     box_with_score = np.column_stack((dets[:, :4], dets[:, 4]))
     box_with_score_m = ms.Tensor(box_with_score)
 
-    keep, _, _ = nms(box_with_score_m)
+    _, output_idx, selected_mask = nms(box_with_score_m)
 
-    return list(keep)
+    keep = list(compress(output_idx, selected_mask))
+
+    return [int(idx) for idx in keep]
 
 
 def point_form(boxes):
@@ -91,8 +96,10 @@ def intersect(box_a, box_b):
     """
     A = box_a.shape[0]
     B = box_b.shape[0]
-    max_xy = ops.min(box_a[:, 2:].unsqueeze(1).expand(A, B, 2), box_b[:, 2:].unsqueeze(0).expand(A, B, 2))
-    min_xy = ops.max(box_a[:, :2].unsqueeze(1).expand(A, B, 2), box_b[:, :2].unsqueeze(0).expand(A, B, 2))
+    max_xy = ops.min(box_a[:, 2:].unsqueeze(1).expand(
+        A, B, 2), box_b[:, 2:].unsqueeze(0).expand(A, B, 2))
+    min_xy = ops.max(box_a[:, :2].unsqueeze(1).expand(
+        A, B, 2), box_b[:, :2].unsqueeze(0).expand(A, B, 2))
     inter = ops.clamp((max_xy - min_xy), min=0)
     return inter[:, :, 0] * inter[:, :, 1]
 
@@ -110,8 +117,10 @@ def jaccard(box_a, box_b):
         jaccard overlap: (tensor) Shape: [box_a.shape[0], box_b.shape[0]]
     """
     inter = intersect(box_a, box_b)
-    area_a = ((box_a[:, 2] - box_a[:, 0]) * (box_a[:, 3] - box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
-    area_b = ((box_b[:, 2] - box_b[:, 0]) * (box_b[:, 3] - box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
+    area_a = ((box_a[:, 2] - box_a[:, 0]) * (box_a[:, 3] -
+              box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
+    area_b = ((box_b[:, 2] - box_b[:, 0]) * (box_b[:, 3] -
+              box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
     union = area_a + area_b - inter
     return inter / union  # [A,B]
 
@@ -182,14 +191,18 @@ def match(threshold, truths, priors, variances, labels, landms, loc_t, conf_t, l
     best_prior_idx.squeeze_(1)
     best_prior_idx_filter.squeeze_(1)
     best_prior_overlap.squeeze_(1)
-    best_truth_overlap.index_fill_(0, best_prior_idx_filter, 2)  # ensure best prior
+    best_truth_overlap.index_fill_(
+        0, best_prior_idx_filter, 2)  # ensure best prior
     # TODO refactor: index  best_prior_idx with long tensor
     # ensure every gt matches with its prior of max overlap
     for j in range(best_prior_idx.shape[0]):  # 判别此anchor是预测哪一个boxes
         best_truth_idx[best_prior_idx[j]] = j
-    matches = truths[best_truth_idx]  # Shape: [num_priors,4] 此处为每一个anchor对应的bbox取出来
-    conf = labels[best_truth_idx]  # Shape: [num_priors]      此处为每一个anchor对应的label取出来
-    conf[best_truth_overlap < threshold] = 0  # label as background   overlap<0.35的全部作为负样本
+    # Shape: [num_priors,4] 此处为每一个anchor对应的bbox取出来
+    matches = truths[best_truth_idx]
+    # Shape: [num_priors]      此处为每一个anchor对应的label取出来
+    conf = labels[best_truth_idx]
+    # label as background   overlap<0.35的全部作为负样本
+    conf[best_truth_overlap < threshold] = 0
     loc = encode(matches, priors, variances)
 
     matches_landm = landms[best_truth_idx]
@@ -238,10 +251,14 @@ def encode_landm(matched, priors, variances):
 
     # dist b/t match center and prior's center
     matched = ops.reshape(matched, (matched.shape[0], 5, 2))
-    priors_cx = priors[:, 0].unsqueeze(1).expand(matched.shape[0], 5).unsqueeze(2)
-    priors_cy = priors[:, 1].unsqueeze(1).expand(matched.shape[0], 5).unsqueeze(2)
-    priors_w = priors[:, 2].unsqueeze(1).expand(matched.shape[0], 5).unsqueeze(2)
-    priors_h = priors[:, 3].unsqueeze(1).expand(matched.shape[0], 5).unsqueeze(2)
+    priors_cx = priors[:, 0].unsqueeze(1).expand(
+        matched.shape[0], 5).unsqueeze(2)
+    priors_cy = priors[:, 1].unsqueeze(1).expand(
+        matched.shape[0], 5).unsqueeze(2)
+    priors_w = priors[:, 2].unsqueeze(1).expand(
+        matched.shape[0], 5).unsqueeze(2)
+    priors_h = priors[:, 3].unsqueeze(1).expand(
+        matched.shape[0], 5).unsqueeze(2)
     priors = ops.cat([priors_cx, priors_cy, priors_w, priors_h], axis=2)
     g_cxcy = matched[:, :, :2] - priors[:, :, :2]
     # encode variance
@@ -267,7 +284,7 @@ def decode(loc, priors, variances):
     """
 
     boxes = ops.cat((priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
-                       priors[:, 2:] * ops.exp(loc[:, 2:] * variances[1])), 1)
+                     priors[:, 2:] * ops.exp(loc[:, 2:] * variances[1])), 1)
     boxes[:, :2] -= boxes[:, 2:] / 2
     boxes[:, 2:] += boxes[:, :2]
     return boxes

@@ -96,7 +96,7 @@ def keypoint_transformation(kp_canonical, he, wo_exp=False):
     # keypoint translation
     t[:, 0] = t[:, 0]*0
     t[:, 2] = t[:, 2]*0
-    t = t.unsqueeze(1).repeat(1, kp.shape[1], 1)
+    t = t.unsqueeze(1).repeat(kp.shape[1], axis=1)
     kp_t = kp_rotated + t
 
     # add expression deviation
