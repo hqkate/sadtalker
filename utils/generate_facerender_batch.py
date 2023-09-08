@@ -7,7 +7,7 @@ import scipy.io as scio
 
 
 def get_facerender_data(coeff_path, pic_path, first_coeff_path, audio_path,
-                        batch_size, input_yaw_list=None, input_pitch_lisret=None, input_roll_list=None,
+                        batch_size, input_yaw_list=None, input_pitch_list=None, input_roll_list=None,
                         expression_scale=1.0, still_mode=False, preprocess='crop', size=256):
 
     semantic_radius = 13
@@ -38,6 +38,7 @@ def get_facerender_data(coeff_path, pic_path, first_coeff_path, audio_path,
 
     source_semantics_new = transform_semantic_1(
         source_semantics, semantic_radius)
+    source_semantics_new = np.asarray(source_semantics_new).astype('float32')
     source_semantics_ts = ms.Tensor(source_semantics_new).unsqueeze(0)
     source_semantics_ts = source_semantics_ts.repeat(batch_size, axis=0)
     data['source_semantics'] = source_semantics_ts
@@ -76,6 +77,8 @@ def get_facerender_data(coeff_path, pic_path, first_coeff_path, audio_path,
     target_semantics_np = np.array(target_semantics_list)
     target_semantics_np = target_semantics_np.reshape(
         batch_size, -1, target_semantics_np.shape[-2], target_semantics_np.shape[-1])
+
+    target_semantics_np = np.asarray(target_semantics_np).astype('float32')
     data['target_semantics_list'] = ms.Tensor(target_semantics_np)
     data['video_name'] = video_name
     data['audio_path'] = audio_path

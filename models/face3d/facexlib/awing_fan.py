@@ -358,7 +358,6 @@ class FAN(nn.Cell):
         boundary_channels = []
         tmp_out = None
         for i in range(self.num_modules):
-            print(getattr(self, 'm' + str(i)))
             hg, boundary_channel = getattr(
                 self, 'm' + str(i))(previous, tmp_out)
 

@@ -52,6 +52,8 @@ class KeypointExtractor():
                     keypoints[:, 0] += int(bboxes[0])
                     keypoints[:, 1] += int(bboxes[1])
 
+                    break
+
                 except RuntimeError as e:
                     if str(e).startswith('CUDA'):
                         print("Warning: out of memory, sleep for 1s")

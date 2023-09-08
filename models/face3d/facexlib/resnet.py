@@ -262,8 +262,9 @@ class ResNet(nn.Cell):
         x = self.layer4(x)
 
         x = self.avgpool(x)
-        x = ops.flatten(x, start_dim=1)
-        x = self.fc(x)
+        if self.use_last_fc:
+            x = ops.flatten(x, start_dim=1)
+            x = self.fc(x)
 
         return x
 

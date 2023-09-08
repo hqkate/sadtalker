@@ -120,9 +120,7 @@ class UpBlock3d(nn.Cell):
         self.norm = BatchNorm3d(out_features, affine=True)
 
     def construct(self, x):
-        print(x)
         out = ops.interpolate(x, scale_factor=(1.0, 2.0, 2.0), )
-        print(out)
         out = self.conv(out)
         out = self.norm(out)
         out = ops.relu(out)

@@ -118,14 +118,14 @@ class CropAndExtract():
             print('No face is detected in the input file')
             return None, None
 
+        print("finished cropping, now saving the image to file.")
+
         # save crop info
         for frame in frames_pil:
             cv2.imwrite(png_path, cv2.cvtColor(
                 np.array(frame), cv2.COLOR_RGB2BGR))
 
         print(f"finished cropping the image and saved to file {png_path}.")
-
-        import pdb; pdb.set_trace()
 
         # 2. get the landmark according to the detected face.
         if not os.path.isfile(landmarks_path):
@@ -163,7 +163,7 @@ class CropAndExtract():
                 full_coeff = self.net_recon(im_t)
                 coeffs = split_coeff(full_coeff)
 
-                pred_coeff = {key: coeffs[key].cpu().numpy() for key in coeffs}
+                pred_coeff = {key: coeffs[key].asnumpy() for key in coeffs}
 
                 pred_coeff = np.concatenate([
                     pred_coeff['exp'],
@@ -172,7 +172,7 @@ class CropAndExtract():
                     trans_params[2:][None],
                 ], 1)
                 video_coeffs.append(pred_coeff)
-                full_coeffs.append(full_coeff.cpu().numpy())
+                full_coeffs.append(full_coeff.asnumpy())
 
             semantic_npy = np.array(video_coeffs)[:, 0]
 

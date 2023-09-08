@@ -107,17 +107,17 @@ def get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=False,
 
         ref_coeff[:, :64] = refeyeblink_coeff[:num_frames, :64]
 
-    indiv_mels = ms.Tensor(indiv_mels).unsqueeze(
+    indiv_mels = ms.Tensor(indiv_mels, ms.float32).unsqueeze(
         1).unsqueeze(0)  # bs T 1 80 16
 
     if use_blink:
-        ratio = ms.Tensor(ratio).unsqueeze(0)                       # bs T
+        ratio = ms.Tensor(ratio, ms.float32).unsqueeze(0)                       # bs T
     else:
-        ratio = ms.Tensor(ratio).unsqueeze(0).fill_(0.)
+        ratio = ms.Tensor(ratio, ms.float32).unsqueeze(0).fill_(0.)
         # bs T
 
-    ref_coeff = ms.Tensor(ref_coeff.astype('float32')).unsqueeze(
-        0)                # bs 1 70
+    ref_coeff = np.asarray(ref_coeff).astype('float32')
+    ref_coeff = ms.Tensor(ref_coeff).unsqueeze(0)                # bs 1 70
 
     return {'indiv_mels': indiv_mels,
             'ref': ref_coeff,
