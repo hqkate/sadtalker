@@ -16,51 +16,52 @@ from utils.face_enhancer import enhancer_generator_with_len, enhancer_list
 from utils.paste_pic import paste_pic
 from utils.videoio import save_video_with_watermark
 
-
-def load_cpk_facevid2vid(self, checkpoint_path, generator=None, discriminator=None,
-                    kp_detector=None, he_estimator=None, optimizer_generator=None,
-                    optimizer_discriminator=None, optimizer_kp_detector=None,
-                    optimizer_he_estimator=None, device="cpu"):
-    checkpoint = ms.load_checkpoint(checkpoint_path)
-    if generator is not None:
-        ms.load_param_into_net(generator, checkpoint['generator'])
-    if kp_detector is not None:
-        ms.load_param_into_net(kp_detector, checkpoint['kp_detector'])
-    if he_estimator is not None:
-        ms.load_param_into_net(he_estimator, checkpoint['he_estimator'])
-    if discriminator is not None:
-        try:
-            ms.load_param_into_net(discriminator, checkpoint['discriminator'])
-        except:
-            print ('No discriminator in the state-dict. Dicriminator will be randomly initialized')
-    if optimizer_generator is not None:
-        ms.load_param_into_net(optimizer_generator, checkpoint['optimizer_generator'])
-    if optimizer_discriminator is not None:
-        try:
-            ms.load_param_into_net(optimizer_discriminator, checkpoint['optimizer_discriminator'])
-        except RuntimeError as e:
-            print ('No discriminator optimizer in the state-dict. Optimizer will be not initialized')
-    if optimizer_kp_detector is not None:
-        ms.load_param_into_net(optimizer_kp_detector, checkpoint['optimizer_kp_detector'])
-    if optimizer_he_estimator is not None:
-        ms.load_param_into_net(optimizer_he_estimator, checkpoint['optimizer_he_estimator'])
-
-    return checkpoint['epoch']
+from tools.save_ms_params import save_params
 
 
-def load_cpk_mapping(self, checkpoint_path, mapping=None, discriminator=None,
-            optimizer_mapping=None, optimizer_discriminator=None, device='cpu'):
-    checkpoint = ms.load_checkpoint(checkpoint_path)
-    if mapping is not None:
-        ms.load_param_into_net(mapping, checkpoint['mapping'])
-    if discriminator is not None:
-        ms.load_param_into_net(discriminator, checkpoint['discriminator'])
-    if optimizer_mapping is not None:
-        ms.load_param_into_net(optimizer_mapping, checkpoint['optimizer_mapping'])
-    if optimizer_discriminator is not None:
-        ms.load_param_into_net(optimizer_discriminator, checkpoint['optimizer_discriminator'])
+def load_cpk_facevid2vid(checkpoint_path, generator=None,
+                         kp_detector=None, he_estimator=None):
 
-        return checkpoint['epoch']
+    generator_path = checkpoint_path.get("generator_checkpoint", None)
+    kp_extractor_path = checkpoint_path.get("kp_extractor_checkpoint", None)
+    he_estimator_path = checkpoint_path.get("he_estimator_checkpoint", None)
+
+    if generator_path is not None:
+        generator_params = ms.load_checkpoint(generator_path)
+        ms.load_param_into_net(generator, generator_params)
+    if kp_extractor_path is not None:
+        detector_params = ms.load_checkpoint(kp_extractor_path)
+        ms.load_param_into_net(kp_detector, detector_params)
+    if he_estimator_path is not None:
+        estimator_params = ms.load_checkpoint(he_estimator_path)
+        ms.load_param_into_net(he_estimator, estimator_params)
+    # if discriminator is not None:
+    #     try:
+    #         ms.load_param_into_net(discriminator, checkpoint['discriminator'])
+    #     except:
+    #         print(
+    #             'No discriminator in the state-dict. Dicriminator will be randomly initialized')
+    # if optimizer_generator is not None:
+    #     ms.load_param_into_net(optimizer_generator,
+    #                            checkpoint['optimizer_generator'])
+    # if optimizer_discriminator is not None:
+    #     try:
+    #         ms.load_param_into_net(
+    #             optimizer_discriminator, checkpoint['optimizer_discriminator'])
+    #     except RuntimeError as e:
+    #         print(
+    #             'No discriminator optimizer in the state-dict. Optimizer will be not initialized')
+    # if optimizer_kp_detector is not None:
+    #     ms.load_param_into_net(optimizer_kp_detector,
+    #                            checkpoint['optimizer_kp_detector'])
+    # if optimizer_he_estimator is not None:
+    #     ms.load_param_into_net(optimizer_he_estimator,
+    #                            checkpoint['optimizer_he_estimator'])
+
+
+def load_cpk_mapping(checkpoint_path, mapping):
+    mapping_params = ms.load_checkpoint(checkpoint_path)
+    ms.load_param_into_net(mapping, mapping_params)
 
 
 class AnimateFromCoeff():
@@ -70,11 +71,11 @@ class AnimateFromCoeff():
             config = yaml.safe_load(f)
 
         generator = OcclusionAwareSPADEGenerator(**config['model_params']['generator_params'],
-                                                    **config['model_params']['common_params'])
+                                                 **config['model_params']['common_params'])
         kp_extractor = KPDetector(**config['model_params']['kp_detector_params'],
-                                    **config['model_params']['common_params'])
+                                  **config['model_params']['common_params'])
         he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-                               **config['model_params']['common_params'])
+                                   **config['model_params']['common_params'])
         mapping = MappingNet(**config['model_params']['mapping_params'])
 
         for param in generator.get_parameters():
@@ -86,15 +87,19 @@ class AnimateFromCoeff():
         for param in mapping.get_parameters():
             param.requires_grad = False
 
-        # if sadtalker_path is not None:
-        #     load_cpk_facevid2vid(sadtalker_path['free_view_checkpoint'], kp_detector=kp_extractor, generator=generator, he_estimator=he_estimator)
-        # else:
-        #     raise AttributeError("Checkpoint should be specified for video head pose estimator.")
+        if sadtalker_path is not None:
+            load_cpk_facevid2vid(
+                sadtalker_path, generator, kp_extractor, he_estimator)
+        else:
+            raise AttributeError(
+                "Checkpoint should be specified for video head pose estimator.")
 
-        # if  sadtalker_path['mappingnet_checkpoint'] is not None:
-        #     load_cpk_mapping(sadtalker_path['mappingnet_checkpoint'], mapping=mapping)
-        # else:
-        #     raise AttributeError("Checkpoint should be specified for video head pose estimator.")
+        if sadtalker_path['mappingnet_checkpoint'] is not None:
+            load_cpk_mapping(
+                sadtalker_path['mappingnet_checkpoint'], mapping=mapping)
+        else:
+            raise AttributeError(
+                "Checkpoint should be specified for video head pose estimator.")
 
         self.kp_extractor = kp_extractor
         self.generator = generator
@@ -128,10 +133,11 @@ class AnimateFromCoeff():
         frame_num = x['frame_num']
 
         predictions_video = make_animation(source_image, source_semantics, target_semantics,
-                                        self.generator, self.kp_extractor, self.he_estimator, self.mapping,
-                                        yaw_c_seq, pitch_c_seq, roll_c_seq, use_exp = True)
+                                           self.generator, self.kp_extractor, self.he_estimator, self.mapping,
+                                           yaw_c_seq, pitch_c_seq, roll_c_seq, use_exp=True)
 
-        predictions_video = predictions_video.reshape((-1,)+predictions_video.shape[2:])
+        predictions_video = predictions_video.reshape(
+            (-1,)+predictions_video.shape[2:])
         predictions_video = predictions_video[:frame_num]
 
         video = []
@@ -141,12 +147,13 @@ class AnimateFromCoeff():
             video.append(image)
         result = img_as_ubyte(video)
 
-        ### the generated video is 256x256, so we keep the aspect ratio,
+        # the generated video is 256x256, so we keep the aspect ratio,
         original_size = crop_info[0]
         if original_size:
-            result = [ cv2.resize(result_i,(img_size, int(img_size * original_size[1]/original_size[0]) )) for result_i in result ]
+            result = [cv2.resize(result_i, (img_size, int(
+                img_size * original_size[1]/original_size[0]))) for result_i in result]
 
-        video_name = x['video_name']  + '.mp4'
+        video_name = x['video_name'] + '.mp4'
         path = os.path.join(video_save_dir, 'temp_'+video_name)
 
         imageio.mimsave(path, result,  fps=float(25))
@@ -154,7 +161,7 @@ class AnimateFromCoeff():
         av_path = os.path.join(video_save_dir, video_name)
         return_path = av_path
 
-        audio_path =  x['audio_path']
+        audio_path = x['audio_path']
         audio_name = os.path.splitext(os.path.split(audio_path)[-1])[0]
         new_audio_path = os.path.join(video_save_dir, audio_name+'.wav')
         start_time = 0
@@ -162,39 +169,50 @@ class AnimateFromCoeff():
         sound = AudioSegment.from_file(audio_path)
         frames = frame_num
         end_time = start_time + frames*1/25*1000
-        word1=sound.set_frame_rate(16000)
+        word1 = sound.set_frame_rate(16000)
         word = word1[start_time:end_time]
         word.export(new_audio_path, format="wav")
 
-        save_video_with_watermark(path, new_audio_path, av_path, watermark= False)
+        save_video_with_watermark(
+            path, new_audio_path, av_path, watermark=False)
         print(f'The generated video is named {video_save_dir}/{video_name}')
 
         if 'full' in preprocess.lower():
             # only add watermark to the full image.
-            video_name_full = x['video_name']  + '_full.mp4'
+            video_name_full = x['video_name'] + '_full.mp4'
             full_video_path = os.path.join(video_save_dir, video_name_full)
             return_path = full_video_path
-            paste_pic(path, pic_path, crop_info, new_audio_path, full_video_path, extended_crop= True if 'ext' in preprocess.lower() else False)
-            print(f'The generated video is named {video_save_dir}/{video_name_full}')
+            paste_pic(path, pic_path, crop_info, new_audio_path, full_video_path,
+                      extended_crop=True if 'ext' in preprocess.lower() else False)
+            print(
+                f'The generated video is named {video_save_dir}/{video_name_full}')
         else:
             full_video_path = av_path
 
-        #### paste back then enhancers
+        # paste back then enhancers
         if enhancer:
-            video_name_enhancer = x['video_name']  + '_enhanced.mp4'
-            enhanced_path = os.path.join(video_save_dir, 'temp_'+video_name_enhancer)
-            av_path_enhancer = os.path.join(video_save_dir, video_name_enhancer)
+            video_name_enhancer = x['video_name'] + '_enhanced.mp4'
+            enhanced_path = os.path.join(
+                video_save_dir, 'temp_'+video_name_enhancer)
+            av_path_enhancer = os.path.join(
+                video_save_dir, video_name_enhancer)
             return_path = av_path_enhancer
 
             try:
-                enhanced_images_gen_with_len = enhancer_generator_with_len(full_video_path, method=enhancer, bg_upsampler=background_enhancer)
-                imageio.mimsave(enhanced_path, enhanced_images_gen_with_len, fps=float(25))
+                enhanced_images_gen_with_len = enhancer_generator_with_len(
+                    full_video_path, method=enhancer, bg_upsampler=background_enhancer)
+                imageio.mimsave(
+                    enhanced_path, enhanced_images_gen_with_len, fps=float(25))
             except:
-                enhanced_images_gen_with_len = enhancer_list(full_video_path, method=enhancer, bg_upsampler=background_enhancer)
-                imageio.mimsave(enhanced_path, enhanced_images_gen_with_len, fps=float(25))
+                enhanced_images_gen_with_len = enhancer_list(
+                    full_video_path, method=enhancer, bg_upsampler=background_enhancer)
+                imageio.mimsave(
+                    enhanced_path, enhanced_images_gen_with_len, fps=float(25))
 
-            save_video_with_watermark(enhanced_path, new_audio_path, av_path_enhancer, watermark= False)
-            print(f'The generated video is named {video_save_dir}/{video_name_enhancer}')
+            save_video_with_watermark(
+                enhanced_path, new_audio_path, av_path_enhancer, watermark=False)
+            print(
+                f'The generated video is named {video_save_dir}/{video_name_enhancer}')
             os.remove(enhanced_path)
 
         os.remove(path)

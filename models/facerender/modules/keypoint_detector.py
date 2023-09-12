@@ -15,16 +15,34 @@ class KPDetector(nn.Cell):
                  num_blocks, temperature, estimate_jacobian=False, scale_factor=1, single_jacobian_map=False):
         super(KPDetector, self).__init__()
 
-        self.predictor = KPHourglass(block_expansion, in_features=image_channel,
-                                     max_features=max_features,  reshape_features=reshape_channel, reshape_depth=reshape_depth, num_blocks=num_blocks)
+        self.predictor = KPHourglass(
+            block_expansion,
+            in_features=image_channel,
+            max_features=max_features,
+            reshape_features=reshape_channel,
+            reshape_depth=reshape_depth,
+            num_blocks=num_blocks
+        )
 
-        # self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=7, padding=3)
-        self.kp = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=num_kp, kernel_size=3, pad_mode='pad', padding=1)
+        self.kp = nn.Conv3d(
+            in_channels=self.predictor.out_filters,
+            out_channels=num_kp,
+            kernel_size=3,
+            pad_mode='pad',
+            padding=1,
+            has_bias=True
+        )
 
         if estimate_jacobian:
             self.num_jacobian_maps = 1 if single_jacobian_map else num_kp
-            # self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=7, padding=3)
-            self.jacobian = nn.Conv3d(in_channels=self.predictor.out_filters, out_channels=9 * self.num_jacobian_maps, kernel_size=3, pad_mode='pad', padding=1)
+            self.jacobian = nn.Conv3d(
+                in_channels=self.predictor.out_filters,
+                out_channels=9 * self.num_jacobian_maps,
+                kernel_size=3,
+                pad_mode='pad',
+                padding=1,
+                has_bias=True
+            )
             '''
             initial as:
             [[1 0 0]
@@ -32,14 +50,16 @@ class KPDetector(nn.Cell):
              [0 0 1]]
             '''
             self.jacobian.weight.data.zero_()
-            self.jacobian.bias.data.copy_(ms.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1] * self.num_jacobian_maps, dtype=torch.float))
+            self.jacobian.bias.data.copy_(ms.tensor(
+                [1, 0, 0, 0, 1, 0, 0, 0, 1] * self.num_jacobian_maps, dtype=ms.float32))
         else:
             self.jacobian = None
 
         self.temperature = temperature
         self.scale_factor = scale_factor
         if self.scale_factor != 1:
-            self.down = AntiAliasInterpolation2d(image_channel, self.scale_factor)
+            self.down = AntiAliasInterpolation2d(
+                image_channel, self.scale_factor)
 
     def gaussian2kp(self, heatmap):
         """
@@ -47,8 +67,9 @@ class KPDetector(nn.Cell):
         """
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
-        grid = make_coordinate_grid(shape[2:], heatmap.type()).unsqueeze_(0).unsqueeze_(0)
-        value = (heatmap * grid).sum(dim=(2, 3, 4))
+        grid = make_coordinate_grid(
+            shape[2:], heatmap.dtype).unsqueeze(0).unsqueeze(0)
+        value = (heatmap * grid).sum(axis=(2, 3, 4))
         kp = {'value': value}
 
         return kp
@@ -76,7 +97,8 @@ class KPDetector(nn.Cell):
             jacobian = heatmap * jacobian_map
             jacobian = jacobian.view(final_shape[0], final_shape[1], 9, -1)
             jacobian = jacobian.sum(dim=-1)
-            jacobian = jacobian.view(jacobian.shape[0], jacobian.shape[1], 3, 3)
+            jacobian = jacobian.view(
+                jacobian.shape[0], jacobian.shape[1], 3, 3)
             out['jacobian'] = jacobian
 
         return out
@@ -90,47 +112,66 @@ class HEEstimator(nn.Cell):
     def __init__(self, block_expansion, feature_channel, num_kp, image_channel, max_features, num_bins=66, estimate_jacobian=True):
         super(HEEstimator, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=image_channel, out_channels=block_expansion, kernel_size=7, pad_mode='pad', padding=3, stride=2)
+        self.conv1 = nn.Conv2d(
+            in_channels=image_channel,
+            out_channels=block_expansion,
+            kernel_size=7,
+            pad_mode='pad',
+            padding=3,
+            stride=2,
+            has_bias=True
+        )
         self.norm1 = BatchNorm2d(block_expansion, affine=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, pad_mode='pad', padding=1)
+        self.maxpool = nn.MaxPool2d(
+            kernel_size=3, stride=2, pad_mode='pad', padding=1)
 
-        self.conv2 = nn.Conv2d(in_channels=block_expansion, out_channels=256, kernel_size=1)
+        self.conv2 = nn.Conv2d(
+            in_channels=block_expansion,
+            out_channels=256,
+            kernel_size=1,
+            has_bias=True
+        )
         self.norm2 = BatchNorm2d(256, affine=True)
 
-        self.block1 = nn.SequentialCell()
+        block1 = nn.SequentialCell()
         for i in range(3):
-            self.block1.append(ResBottleneck(in_features=256, stride=1))
+            block1.append(ResBottleneck(in_features=256, stride=1))
+        self.block1 = block1
 
-        self.conv3 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=1)
+        self.conv3 = nn.Conv2d(
+            in_channels=256, out_channels=512, kernel_size=1, has_bias=True)
         self.norm3 = BatchNorm2d(512, affine=True)
         self.block2 = ResBottleneck(in_features=512, stride=2)
 
-        self.block3 = nn.SequentialCell()
+        block3 = nn.SequentialCell()
         for i in range(3):
-            self.block3.append(ResBottleneck(in_features=512, stride=1))
+            block3.append(ResBottleneck(in_features=512, stride=1))
+        self.block3 = block3
 
-        self.conv4 = nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=1)
+        self.conv4 = nn.Conv2d(
+            in_channels=512, out_channels=1024, kernel_size=1, has_bias=True)
         self.norm4 = BatchNorm2d(1024, affine=True)
         self.block4 = ResBottleneck(in_features=1024, stride=2)
 
-        self.block5 = nn.SequentialCell()
+        block5 = nn.SequentialCell()
         for i in range(5):
-            self.block5.append(ResBottleneck(in_features=1024, stride=1))
+            block5.append(ResBottleneck(in_features=1024, stride=1))
+        self.block5 = block5
 
-        self.conv5 = nn.Conv2d(in_channels=1024, out_channels=2048, kernel_size=1)
+        self.conv5 = nn.Conv2d(
+            in_channels=1024, out_channels=2048, kernel_size=1, has_bias=True)
         self.norm5 = BatchNorm2d(2048, affine=True)
         self.block6 = ResBottleneck(in_features=2048, stride=2)
 
-        self.block7 = nn.SequentialCell()
+        block7 = nn.SequentialCell()
         for i in range(2):
-            self.block7.append(ResBottleneck(in_features=2048, stride=1))
+            block7.append(ResBottleneck(in_features=2048, stride=1))
+        self.block7 = block7
 
         self.fc_roll = nn.Dense(2048, num_bins)
         self.fc_pitch = nn.Dense(2048, num_bins)
         self.fc_yaw = nn.Dense(2048, num_bins)
-
         self.fc_t = nn.Dense(2048, 3)
-
         self.fc_exp = nn.Dense(2048, 3*num_kp)
 
     def construct(self, x):

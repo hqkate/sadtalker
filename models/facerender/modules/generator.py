@@ -11,7 +11,7 @@ class SPADEDecoder(nn.Cell):
         norm_G = 'spadespectralinstance'
         label_nc = 256
 
-        self.fc = nn.Conv2d(ic, 2 * ic, 3, pad_mode='pad', padding=1)
+        self.fc = nn.Conv2d(ic, 2 * ic, 3, pad_mode='pad', padding=1, has_bias=True)
         self.G_middle_0 = SPADEResnetBlock(2 * ic, 2 * ic, norm_G, label_nc)
         self.G_middle_1 = SPADEResnetBlock(2 * ic, 2 * ic, norm_G, label_nc)
         self.G_middle_2 = SPADEResnetBlock(2 * ic, 2 * ic, norm_G, label_nc)
@@ -20,8 +20,8 @@ class SPADEDecoder(nn.Cell):
         self.G_middle_5 = SPADEResnetBlock(2 * ic, 2 * ic, norm_G, label_nc)
         self.up_0 = SPADEResnetBlock(2 * ic, ic, norm_G, label_nc)
         self.up_1 = SPADEResnetBlock(ic, oc, norm_G, label_nc)
-        self.conv_img = nn.Conv2d(oc, 3, 3, pad_mode='pad', padding=1)
-        self.up = nn.Upsample(scale_factor=2)
+        self.conv_img = nn.Conv2d(oc, 3, 3, pad_mode='pad', padding=1, has_bias=True)
+        self.up = nn.Upsample(scale_factor=2.0, mode='area')
 
     def construct(self, feature):
         seg = feature
@@ -65,18 +65,19 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
             down_blocks.append(DownBlock2d(in_features, out_features, kernel_size=(3, 3), padding=(1, 1, 1, 1)))
         self.down_blocks = nn.CellList(down_blocks)
 
-        self.second = nn.Conv2d(in_channels=out_features, out_channels=max_features, kernel_size=1, stride=1)
+        self.second = nn.Conv2d(in_channels=out_features, out_channels=max_features, kernel_size=1, stride=1, has_bias=True)
 
         self.reshape_channel = reshape_channel
         self.reshape_depth = reshape_depth
 
-        self.resblocks_3d = nn.SequentialCell()
+        resblocks_3d = nn.SequentialCell()
         for i in range(num_resblocks):
-            self.resblocks_3d.append(ResBlock3d(reshape_channel, kernel_size=3, padding=1))
+            resblocks_3d.append(ResBlock3d(reshape_channel, kernel_size=3, padding=1))
+        self.resblocks_3d = resblocks_3d
 
         out_features = block_expansion * (2 ** (num_down_blocks))
         self.third = SameBlock2d(max_features, out_features, kernel_size=(3, 3), padding=(1, 1, 1, 1), lrelu=True)
-        self.fourth = nn.Conv2d(in_channels=out_features, out_channels=out_features, kernel_size=1, stride=1)
+        self.fourth = nn.Conv2d(in_channels=out_features, out_channels=out_features, kernel_size=1, stride=1, has_bias=True)
 
         self.estimate_occlusion_map = estimate_occlusion_map
         self.image_channel = image_channel

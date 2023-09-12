@@ -20,7 +20,7 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
         # import pdb; pdb.set_trace()
 
         # if "conv_block.1." in ms_param.name:
-        if any(x in ms_param.name for x in bn_ms2pt.keys()):
+        if any(x in ms_param.name and "mlp_gamma" not in ms_param.name and "mlp_beta" not in ms_param.name for x in bn_ms2pt.keys()):
             # ms_param_item = ms_param.name.split(".")
             # pt_param_item = ms_param_item[:-1] + [bn_ms2pt[ms_param_item[-1]]]
             # pt_param = ".".join(pt_param_item)
@@ -44,10 +44,10 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
                 ms_value = pt_params[ms_param.name]
                 new_params_list.append(
                     {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32)})
-            # elif "netD_motion.seq" in ms_param.name:
-            #     ms_value = pt_params[ms_param.name]
-            #     new_params_list.append(
-            #         {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(2)})
+            elif ms_param.name in pt_params and ("weight_u" in ms_param.name or "weight_v" in ms_param.name):
+                ms_value = pt_params[ms_param.name]
+                new_params_list.append(
+                    {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(1)})
             else:
                 print(ms_param.name, "not match in pt_params")
     # 保存成MindSpore的checkpoint
@@ -137,7 +137,96 @@ def convert_awingfan():
                   "checkpoints/ms/ms_detector_fan.ckpt")
 
 
+def convert_mapping():
+
+    import yaml
+    from models.facerender.modules.mapping import MappingNet
+
+    with open('config/facerender.yaml') as f:
+        config = yaml.safe_load(f)
+
+    mapping = MappingNet(**config['model_params']['mapping_params'])
+
+    ms_params = mapping.get_parameters()
+
+    with open("../SadTalker/pt_weights_mapping.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_mapping.ckpt")
+
+
+def convert_generator():
+    import yaml
+    from models.facerender.modules.generator import OcclusionAwareSPADEGenerator
+
+    with open('config/facerender.yaml') as f:
+        config = yaml.safe_load(f)
+
+    ms2pt = {
+        'resblocks_3d.0.': 'resblocks_3d.3dr0.',
+        'resblocks_3d.1.': 'resblocks_3d.3dr1.',
+        'resblocks_3d.2.': 'resblocks_3d.3dr2.',
+        'resblocks_3d.3.': 'resblocks_3d.3dr3.',
+        'resblocks_3d.4.': 'resblocks_3d.3dr4.',
+        'resblocks_3d.5.': 'resblocks_3d.3dr5.',
+        ".bn2d": "",
+    }
+
+    generator = OcclusionAwareSPADEGenerator(**config['model_params']['generator_params'],
+                                             **config['model_params']['common_params'])
+
+    ms_params = generator.get_parameters()
+
+    with open("../SadTalker/pt_weights_generator.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_generator.ckpt", ms2pt)
+
+
+def convert_heestimator():
+    import yaml
+    from models.facerender.modules.keypoint_detector import HEEstimator
+
+    with open('config/facerender.yaml') as f:
+        config = yaml.safe_load(f)
+
+
+def convert_kpextractor():
+    import yaml
+    from models.facerender.modules.keypoint_detector import KPDetector
+
+    with open('config/facerender.yaml') as f:
+        config = yaml.safe_load(f)
+
+    ms2pt = {
+        "predictor.down_blocks.0": "predictor.down_blocks.down0",
+        "predictor.down_blocks.1": "predictor.down_blocks.down1",
+        "predictor.down_blocks.2": "predictor.down_blocks.down2",
+        "predictor.down_blocks.3": "predictor.down_blocks.down3",
+        "predictor.down_blocks.4": "predictor.down_blocks.down4",
+        "predictor.up_blocks.0": "predictor.up_blocks.up0",
+        "predictor.up_blocks.1": "predictor.up_blocks.up1",
+        "predictor.up_blocks.2": "predictor.up_blocks.up2",
+        "predictor.up_blocks.3": "predictor.up_blocks.up3",
+        "predictor.up_blocks.4": "predictor.up_blocks.up4",
+        ".bn2d": "",
+    }
+
+    kp_extractor = KPDetector(**config['model_params']['kp_detector_params'],
+                              **config['model_params']['common_params'])
+
+    ms_params = kp_extractor.get_parameters()
+
+    with open("../SadTalker/pt_weights_kp_extractor.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_kp_extractor.ckpt", ms2pt)
+
+
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
-                        device_target="Ascend", device_id=6)
-    convert_awingfan()
+                        device_target="Ascend", device_id=2)
+    convert_generator()

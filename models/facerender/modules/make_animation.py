@@ -33,7 +33,7 @@ def normalize_kp(kp_source, kp_driving, kp_driving_initial, adapt_movement_scale
 
 def headpose_pred_to_degree(pred):
     idx_tensor = [idx for idx in range(66)]
-    idx_tensor = ms.Tensor(idx_tensor, data_type=pred.type())
+    idx_tensor = ms.Tensor(idx_tensor, dtype=pred.dtype)
     pred = ops.softmax(pred)
     degree = ops.sum(pred*idx_tensor, 1) * 3 - 99
     return degree
@@ -65,7 +65,9 @@ def get_rotation_matrix(yaw, pitch, roll):
                         ops.zeros_like(roll), ops.zeros_like(roll), ops.ones_like(roll)], axis=1)
     roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
 
-    rot_mat = ops.einsum('bij,bjk,bkm->bim', pitch_mat, yaw_mat, roll_mat)
+    # rot_mat = ops.einsum('bij,bjk,bkm->bim', pitch_mat, yaw_mat, roll_mat) # TODO!!!
+
+    rot_mat = ms.Tensor(np.einsum('bij,bjk,bkm->bim', pitch_mat.asnumpy(), yaw_mat.asnumpy(), roll_mat.asnumpy()))
 
     return rot_mat
 
@@ -91,7 +93,8 @@ def keypoint_transformation(kp_canonical, he, wo_exp=False):
         exp = exp*0
 
     # keypoint rotation
-    kp_rotated = ops.einsum('bmp,bkp->bkm', rot_mat, kp)
+    kp_rotated = ms.Tensor(np.einsum('bmp,bkp->bkm', rot_mat.asnumpy(), kp.asnumpy()))
+    # kp_rotated = ops.einsum('bmp,bkp->bkm', rot_mat, kp) # TODO!!!
 
     # keypoint translation
     t[:, 0] = t[:, 0]*0
@@ -113,7 +116,8 @@ def make_animation(source_image, source_semantics, target_semantics,
 
     predictions = []
 
-    kp_canonical = kp_detector(source_image)
+    # kp_canonical = kp_detector(source_image) # TODO!!!! memory issue
+    kp_canonical = {'value': ops.randn((2, 15, 3))}
     he_source = mapping(source_semantics)
     kp_source = keypoint_transformation(kp_canonical, he_source)
 

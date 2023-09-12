@@ -24,7 +24,8 @@ from utils.common import is_ascend
 
 class SpectralNormAscendOpt(nn.Cell):
     """
-    Compute the spectral norm of a weights matrix given a pair of so-approximated singular vectors.
+    Compute the spectral norm of a weights matrix,
+    given a pair of so-approximated singular vectors.
     """
 
     def construct(self, w, u, v):
@@ -43,7 +44,8 @@ class SpectralNormAscendOpt(nn.Cell):
 
 class SpectralNorm(nn.Cell):
     """
-    Compute the spectral norm of a weights matrix given a pair of so-approximated singular vectors.
+    Compute the spectral norm of a weights matrix,
+    given a pair of so-approximated singular vectors.
     """
 
     def construct(self, w, u, v):
@@ -68,8 +70,13 @@ class Conv2dNormalized(nn.Cell):
         dilation=1,
     ):
         super().__init__()
-        self.conv2d = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, pad_mode=pad_mode, dilation=dilation,
+        self.conv2d = ops.Conv2D(
+            out_channel=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            pad=padding,
+            pad_mode=pad_mode,
+            dilation=dilation,
         )
         self.bias_add = ops.BiasAdd(data_format="NCHW")
         self.has_bias = has_bias
@@ -79,13 +86,27 @@ class Conv2dNormalized(nn.Cell):
                 "zeros", (out_channels,)), name="bias")
 
         self.weight_orig = Parameter(
-            initializer(Normal(sigma=0.02), (out_channels, in_channels, kernel_size, kernel_size)), name="weight_orig"
+            initializer(
+                Normal(sigma=0.02),
+                (out_channels, in_channels, kernel_size, kernel_size)
+            ),
+            name="weight_orig"
         )
 
-        self.weight_u = Parameter(self.initialize_param(
-            out_channels, 1), requires_grad=False, name="weight_u")
+        self.weight_u = Parameter(
+            self.initialize_param(
+                out_channels, 1
+            ),
+            requires_grad=False,
+            name="weight_u"
+        )
+
         self.weight_v = Parameter(
-            self.initialize_param(in_channels * kernel_size * kernel_size, 1), requires_grad=False, name="weight_v"
+            self.initialize_param(
+                in_channels * kernel_size * kernel_size, 1
+            ),
+            requires_grad=False,
+            name="weight_v"
         )
 
         if is_ascend():

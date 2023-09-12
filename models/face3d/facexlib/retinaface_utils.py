@@ -186,11 +186,11 @@ def match(threshold, truths, priors, variances, labels, landms, loc_t, conf_t, l
 
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
-    best_truth_idx.squeeze_(0)
-    best_truth_overlap.squeeze_(0)
-    best_prior_idx.squeeze_(1)
-    best_prior_idx_filter.squeeze_(1)
-    best_prior_overlap.squeeze_(1)
+    best_truth_idx = best_truth_idx.squeeze(0)
+    best_truth_overlap = best_truth_overlap.squeeze(0)
+    best_prior_idx = best_prior_idx.squeeze(1)
+    best_prior_idx_filter = best_prior_idx_filter.squeeze(1)
+    best_prior_overlap = best_prior_overlap.squeeze(1)
     best_truth_overlap.index_fill_(
         0, best_prior_idx_filter, 2)  # ensure best prior
     # TODO refactor: index  best_prior_idx with long tensor

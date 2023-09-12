@@ -23,7 +23,7 @@ __all__ = ['SynchronizedBatchNorm1d', 'SynchronizedBatchNorm2d', 'SynchronizedBa
 
 def _sum_ft(tensor):
     """sum over the first and last dimention"""
-    return tensor.sum(dim=0).sum(dim=-1)
+    return tensor.sum(axis=0).sum(axis=-1)
 
 
 def _unsqueeze_ft(tensor):
@@ -53,8 +53,8 @@ class _SynchronizedBatchNorm(_BatchNorm):
                 self.training, self.momentum, self.eps)
 
         # Resize the input to (B, C, -1).
-        input_shape = input.size()
-        input = input.view(input.size(0), self.num_features, -1)
+        input_shape = input.shape
+        input = input.view(input.shape[0], self.num_features, -1)
 
         # Compute the sum and square-sum.
         sum_size = input.size(0) * input.size(2)

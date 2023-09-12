@@ -22,13 +22,16 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
         'free_view_checkpoint': os.path.join(checkpoint_dir, 'facevid2vid_00189-model.pth.tar'),
         'path_of_net_recon_model': os.path.join(checkpoint_dir, 'ms/ms_net_recon.ckpt'),
         'dir_of_BFM_fitting': os.path.join(checkpoint_dir, 'BFM_Fitting'),
+        'mappingnet_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_mapping.ckpt'),
+        'generator_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_generator.ckpt'),
+        'kp_extractor_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_kp_extractor.ckpt'),
     }
     sadtalker_paths['audio2pose_yaml_path'] = os.path.join(
         config_dir, 'audio2pose.yaml')
     sadtalker_paths['audio2exp_yaml_path'] = os.path.join(
         config_dir, 'audio2exp.yaml')
     sadtalker_paths['facerender_yaml'] = os.path.join(
-        config_dir, 'facerender.yaml')
+        config_dir, 'facerender.yaml') # non-full preprocess
     sadtalker_paths['use_safetensor'] = False
     return sadtalker_paths
 
@@ -50,8 +53,10 @@ def read_batch_from_pkl(data_file, convert2ts=True):
 
 
 def main(args):
+    # context.set_context(mode=context.PYNATIVE_MODE,
+    #                     device_target="Ascend", device_id=7)
     context.set_context(mode=context.GRAPH_MODE,
-                        device_target="Ascend", device_id=6)
+                        device_target="Ascend", device_id=2)
 
     pic_path = args.source_image
     audio_path = args.driven_audio
@@ -82,11 +87,11 @@ def main(args):
     first_frame_dir = os.path.join(save_dir, 'first_frame_dir')
     os.makedirs(first_frame_dir, exist_ok=True)
     print('3DMM Extraction for source image')
-    first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
-                                                                           source_image_flag=True, pic_size=args.size)
+    # first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
+    #                                                                        source_image_flag=True, pic_size=args.size)
 
-    # first_coeff_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.mat"
-    # crop_pic_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
+    first_coeff_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.mat"
+    crop_pic_path = "../SadTalker/results/2023_09_04_06.16.22/first_frame_dir/people_0.png"
 
     if first_coeff_path is None:
         print("Can't get the coeffs of the input")
@@ -118,12 +123,12 @@ def main(args):
         ref_pose_coeff_path = None
 
     # audio2ceoff
-    batch = get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=args.still)
+    # batch = get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=args.still)
 
     # batch = read_batch_from_pkl("../SadTalker/batch_data.pkl")
 
-    coeff_path = audio_to_coeff.generate(
-        batch, save_dir, pose_style, ref_pose_coeff_path)
+    # coeff_path = audio_to_coeff.generate(
+    #     batch, save_dir, pose_style, ref_pose_coeff_path)
 
     # 3dface render
     # if args.face3dvis:
@@ -131,15 +136,20 @@ def main(args):
     #     gen_composed_video(args, device, first_coeff_path, coeff_path, audio_path, os.path.join(save_dir, '3dface.mp4'))
 
     # coeff2video
-    data = get_facerender_data(coeff_path, crop_pic_path, first_coeff_path, audio_path,
-                               batch_size, input_yaw_list, input_pitch_list, input_roll_list,
-                               expression_scale=args.expression_scale, still_mode=args.still, preprocess=args.preprocess, size=args.size)
+    # data = get_facerender_data(coeff_path, crop_pic_path, first_coeff_path, audio_path,
+    #                            batch_size, input_yaw_list, input_pitch_list, input_roll_list,
+    #                            expression_scale=args.expression_scale, still_mode=args.still, preprocess=args.preprocess, size=args.size)
 
-    # data = read_batch_from_pkl("../SadTalker/facerender_data.pkl")
-    # crop_info = read_batch_from_pkl("../SadTalker/crop_info.pkl", convert2ts=False)
+    data = read_batch_from_pkl("../SadTalker/facerender_data.pkl")
+    crop_info = read_batch_from_pkl(
+        "../SadTalker/crop_info.pkl", convert2ts=False)
 
     result = animate_from_coeff.generate(data, save_dir, pic_path, crop_info,
-                                         enhancer=args.enhancer, background_enhancer=args.background_enhancer, preprocess=args.preprocess, img_size=args.size)
+                                         enhancer=args.enhancer,
+                                         background_enhancer=args.background_enhancer,
+                                         preprocess=args.preprocess,
+                                         img_size=args.size
+                                         )
 
     shutil.move(result, save_dir+'.mp4')
     print('The generated video is named:', save_dir+'.mp4')
