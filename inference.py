@@ -25,13 +25,14 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
         'mappingnet_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_mapping.ckpt'),
         'generator_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_generator.ckpt'),
         'kp_extractor_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_kp_extractor.ckpt'),
+        'he_estimator_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_he_estimator.ckpt')
     }
     sadtalker_paths['audio2pose_yaml_path'] = os.path.join(
         config_dir, 'audio2pose.yaml')
     sadtalker_paths['audio2exp_yaml_path'] = os.path.join(
         config_dir, 'audio2exp.yaml')
     sadtalker_paths['facerender_yaml'] = os.path.join(
-        config_dir, 'facerender.yaml') # non-full preprocess
+        config_dir, 'facerender.yaml')  # non-full preprocess
     sadtalker_paths['use_safetensor'] = False
     return sadtalker_paths
 
@@ -56,7 +57,7 @@ def main(args):
     # context.set_context(mode=context.PYNATIVE_MODE,
     #                     device_target="Ascend", device_id=7)
     context.set_context(mode=context.GRAPH_MODE,
-                        device_target="Ascend", device_id=2)
+                        device_target="CPU", device_id=2)
 
     pic_path = args.source_image
     audio_path = args.driven_audio

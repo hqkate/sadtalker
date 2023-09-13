@@ -17,8 +17,6 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
     for ms_param in ms_params:
         # 在参数列表中，只有包含bn和downsample.1的参数是BatchNorm算子的参数
 
-        # import pdb; pdb.set_trace()
-
         # if "conv_block.1." in ms_param.name:
         if any(x in ms_param.name and "mlp_gamma" not in ms_param.name and "mlp_beta" not in ms_param.name for x in bn_ms2pt.keys()):
             # ms_param_item = ms_param.name.split(".")
@@ -192,6 +190,33 @@ def convert_heestimator():
     with open('config/facerender.yaml') as f:
         config = yaml.safe_load(f)
 
+    ms2pt = {
+        "block1.0.": "block1.b1_0.",
+        "block1.1.": "block1.b1_1.",
+        "block1.2.": "block1.b1_2.",
+        "block3.0.": "block3.b3_0.",
+        "block3.1.": "block3.b3_1.",
+        "block3.2.": "block3.b3_2.",
+        "block5.0.": "block5.b5_0.",
+        "block5.1.": "block5.b5_1.",
+        "block5.2.": "block5.b5_2.",
+        "block5.3.": "block5.b5_3.",
+        "block5.4.": "block5.b5_4.",
+        "block7.0.": "block7.b7_0.",
+        "block7.1.": "block7.b7_1.",
+    }
+
+    he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
+                               **config['model_params']['common_params'])
+
+    ms_params = he_estimator.get_parameters()
+
+    with open("../SadTalker/pt_weights_he_estimator.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_he_estimator.ckpt", ms2pt)
+
 
 def convert_kpextractor():
     import yaml
@@ -228,5 +253,5 @@ def convert_kpextractor():
 
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
-                        device_target="Ascend", device_id=2)
-    convert_generator()
+                        device_target="CPU", device_id=2)
+    convert_heestimator()
