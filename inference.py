@@ -13,7 +13,7 @@ from models.facerender.animate import AnimateFromCoeff
 from argparse import ArgumentParser
 
 
-def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
+def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/", preprocess='crop'):
 
     sadtalker_paths = {
         'wav2lip_checkpoint': os.path.join(checkpoint_dir, 'wav2lip.pth'),
@@ -21,7 +21,6 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
         'audio2exp_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_audio2exp.ckpt'),
         'path_of_net_recon_model': os.path.join(checkpoint_dir, 'ms/ms_net_recon.ckpt'),
         'dir_of_BFM_fitting': os.path.join(checkpoint_dir, 'BFM_Fitting'),
-        'mappingnet_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_mapping.ckpt'),
         'generator_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_generator.ckpt'),
         'kp_extractor_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_kp_extractor.ckpt'),
         'he_estimator_checkpoint': os.path.join(checkpoint_dir, 'ms/ms_he_estimator.ckpt')
@@ -30,9 +29,18 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/"):
         config_dir, 'audio2pose.yaml')
     sadtalker_paths['audio2exp_yaml_path'] = os.path.join(
         config_dir, 'audio2exp.yaml')
-    sadtalker_paths['facerender_yaml'] = os.path.join(
-        config_dir, 'facerender.yaml')  # non-full preprocess
-    sadtalker_paths['use_safetensor'] = False
+
+    if 'full' in preprocess:
+        sadtalker_paths['mappingnet_checkpoint'] = os.path.join(
+            checkpoint_dir, 'ms/ms_mapping_full.ckpt')
+        sadtalker_paths['facerender_yaml'] = os.path.join(
+            config_dir, 'facerender_still.yaml')
+    else:
+        sadtalker_paths['mappingnet_checkpoint'] = os.path.join(
+            checkpoint_dir, 'ms/ms_mapping.ckpt')
+        sadtalker_paths['facerender_yaml'] = os.path.join(
+            config_dir, 'facerender.yaml')
+
     return sadtalker_paths
 
 
@@ -53,10 +61,10 @@ def read_batch_from_pkl(data_file, convert2ts=True):
 
 
 def main(args):
-    # context.set_context(mode=context.PYNATIVE_MODE,
-    #                     device_target="Ascend", device_id=7)
-    context.set_context(mode=context.GRAPH_MODE,
+    context.set_context(mode=context.PYNATIVE_MODE,
                         device_target="Ascend", device_id=7)
+    # context.set_context(mode=context.GRAPH_MODE,
+    #                     device_target="Ascend", device_id=7)
 
     pic_path = args.source_image
     audio_path = args.driven_audio
@@ -73,7 +81,7 @@ def main(args):
     current_root_path = os.path.split(sys.argv[0])[0]
 
     sadtalker_paths = init_path(args.checkpoint_dir, os.path.join(
-        current_root_path, 'config'))
+        current_root_path, 'config'), args.preprocess)
 
     # init model
     preprocess_model = CropAndExtract(sadtalker_paths)
@@ -121,8 +129,10 @@ def main(args):
         ref_pose_coeff_path = None
 
     # audio2ceoff
-    batch = get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=args.still)
-    coeff_path = audio_to_coeff.generate(batch, save_dir, pose_style, ref_pose_coeff_path)
+    batch = get_data(first_coeff_path, audio_path,
+                     ref_eyeblink_coeff_path, still=args.still)
+    coeff_path = audio_to_coeff.generate(
+        batch, save_dir, pose_style, ref_pose_coeff_path)
 
     # 3dface render
     # if args.face3dvis:

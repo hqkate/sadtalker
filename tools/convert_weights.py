@@ -42,10 +42,11 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
                 ms_value = pt_params[ms_param.name]
                 new_params_list.append(
                     {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32)})
-            elif ms_param.name in pt_params and ("weight_u" in ms_param.name or "weight_v" in ms_param.name):
+            # elif ms_param.name in pt_params and ("weight_u" in ms_param.name or "weight_v" in ms_param.name):
+            elif ms_param.name in pt_params and "weight" in ms_param.name:
                 ms_value = pt_params[ms_param.name]
                 new_params_list.append(
-                    {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(1)})
+                    {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(2)})
             else:
                 print(ms_param.name, "not match in pt_params")
     # 保存成MindSpore的checkpoint
@@ -140,18 +141,18 @@ def convert_mapping():
     import yaml
     from models.facerender.modules.mapping import MappingNet
 
-    with open('config/facerender.yaml') as f:
+    with open('config/facerender_still.yaml') as f:
         config = yaml.safe_load(f)
 
     mapping = MappingNet(**config['model_params']['mapping_params'])
 
     ms_params = mapping.get_parameters()
 
-    with open("../SadTalker/pt_weights_mapping.pkl", "rb") as f:
+    with open("pickles/pt_weights_mapping_full.pkl", "rb") as f:
         state_dict = pickle.load(f)
 
     param_convert(ms_params, state_dict,
-                  "checkpoints/ms/ms_mapping.ckpt")
+                  "checkpoints/ms/ms_mapping_full.ckpt")
 
 
 def convert_generator():
@@ -254,4 +255,4 @@ def convert_kpextractor():
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
                         device_target="CPU", device_id=2)
-    convert_heestimator()
+    convert_mapping()
