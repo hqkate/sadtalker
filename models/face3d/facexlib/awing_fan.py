@@ -272,8 +272,7 @@ class HourGlass(nn.Cell):
         low3 = low2
         low3 = getattr(self, 'b3_' + str(level))(low3)
 
-        # up2 = ops.interpolate(low3, scale_factor=2.0, mode='nearest')
-        up2 = ops.interpolate(low3, scale_factor=2.0, mode='area') # TODO!!!
+        up2 = ops.interpolate(low3, scale_factor=2.0, mode='area') # TODO: nearest
 
         return up1 + up2
 

@@ -40,9 +40,10 @@ def headpose_pred_to_degree(pred):
 
 
 def get_rotation_matrix(yaw, pitch, roll):
-    yaw = yaw / 180 * 3.14
-    pitch = pitch / 180 * 3.14
-    roll = roll / 180 * 3.14
+
+    yaw = yaw / 180.0 * 3.14
+    pitch = pitch / 180.0 * 3.14
+    roll = roll / 180.0 * 3.14
 
     roll = roll.unsqueeze(1)
     pitch = pitch.unsqueeze(1)
@@ -65,9 +66,8 @@ def get_rotation_matrix(yaw, pitch, roll):
                         ops.zeros_like(roll), ops.zeros_like(roll), ops.ones_like(roll)], axis=1)
     roll_mat = roll_mat.view(roll_mat.shape[0], 3, 3)
 
-    # rot_mat = ops.einsum('bij,bjk,bkm->bim', pitch_mat, yaw_mat, roll_mat) # TODO!!!
-
-    rot_mat = ms.Tensor(np.einsum('bij,bjk,bkm->bim', pitch_mat.asnumpy(), yaw_mat.asnumpy(), roll_mat.asnumpy()))
+    rot_mat = ms.Tensor(np.einsum(
+        'bij,bjk,bkm->bim', pitch_mat.asnumpy(), yaw_mat.asnumpy(), roll_mat.asnumpy()))
 
     return rot_mat
 
@@ -93,8 +93,8 @@ def keypoint_transformation(kp_canonical, he, wo_exp=False):
         exp = exp*0
 
     # keypoint rotation
-    kp_rotated = ms.Tensor(np.einsum('bmp,bkp->bkm', rot_mat.asnumpy(), kp.asnumpy()))
-    # kp_rotated = ops.einsum('bmp,bkp->bkm', rot_mat, kp) # TODO!!!
+    kp_rotated = ms.Tensor(
+        np.einsum('bmp,bkp->bkm', rot_mat.asnumpy(), kp.asnumpy()))
 
     # keypoint translation
     t[:, 0] = t[:, 0]*0
@@ -116,8 +116,7 @@ def make_animation(source_image, source_semantics, target_semantics,
 
     predictions = []
 
-    # kp_canonical = kp_detector(source_image) # TODO!!!! memory issue
-    kp_canonical = {'value': ops.randn((2, 15, 3))}
+    kp_canonical = kp_detector(source_image)
     he_source = mapping(source_semantics)
     kp_source = keypoint_transformation(kp_canonical, he_source)
 
@@ -135,8 +134,8 @@ def make_animation(source_image, source_semantics, target_semantics,
 
         kp_driving = keypoint_transformation(kp_canonical, he_driving)
 
-        kp_norm = kp_driving
-        out = generator(source_image, kp_source=kp_source, kp_driving=kp_norm)
+        out = generator(source_image, kp_source=kp_source,
+                        kp_driving=kp_driving)
         '''
         source_image_new = out['prediction'].squeeze(1)
         kp_canonical_new =  kp_detector(source_image_new)
@@ -145,7 +144,7 @@ def make_animation(source_image, source_semantics, target_semantics,
         kp_driving_new = keypoint_transformation(kp_canonical_new, he_driving, wo_exp=True)
         out = generator(source_image_new, kp_source=kp_source_new, kp_driving=kp_driving_new)
         '''
-        predictions.append(out['prediction'])
+        predictions.append(out)
     predictions_ts = ops.stack(predictions, axis=1)
     return predictions_ts
 

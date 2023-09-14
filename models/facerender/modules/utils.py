@@ -102,7 +102,7 @@ class UpBlock2d(nn.Cell):
         self.norm = BatchNorm2d(out_features, affine=True)
 
     def construct(self, x):
-        out = ops.interpolate(x, scale_factor=2.0, mode="area")
+        out = ops.interpolate(x, scale_factor=2.0, mode='area')
         out = self.conv(out)
         out = self.norm(out)
         out = ops.relu(out)
@@ -385,7 +385,6 @@ class SPADEResnetBlock(nn.Cell):
             self.norm_s = SPADE(fin, label_nc)
 
     def construct(self, x, seg1):
-        # import pdb; pdb.set_trace()
         x_s = self.shortcut(x, seg1)
 
         normalized_0 = self.norm_0(x, seg1)
@@ -450,7 +449,7 @@ class AntiAliasInterpolation2d(nn.Cell):
             return input
 
         out = ops.pad(input, (self.ka, self.kb, self.ka, self.kb))
-        out = ops.conv2d(out, weight=self.weight, groups=self.groups)  # TODO
+        out = ops.conv2d(out, weight=self.weight, groups=self.groups)
         out = out[:, :, ::self.int_inv_scale, ::self.int_inv_scale]
 
         return out

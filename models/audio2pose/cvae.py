@@ -80,7 +80,6 @@ class Encoder(nn.Cell):
         pose_emb = pose_emb.reshape(bs, -1)  # bs seq_len*6
 
         # audio mapping
-        print(audio_in.shape)
         # bs seq_len audio_emb_out_size
         audio_out = self.linear_audio(audio_in)
         audio_out = audio_out.reshape(bs, -1)

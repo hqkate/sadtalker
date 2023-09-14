@@ -1,3 +1,4 @@
+import mindspore as ms
 from mindspore import nn, ops
 from models.facerender.modules.utils import SameBlock2d, DownBlock2d, ResBlock3d, SPADEResnetBlock
 from models.facerender.modules.dense_motion import DenseMotionNetwork
@@ -94,6 +95,7 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
         return ops.grid_sample(inp, deformation)
 
     def construct(self, source_image, kp_driving, kp_source):
+
         # Encoding (downsampling) part
         out = self.first(source_image)
         for i in range(len(self.down_blocks)):
@@ -134,6 +136,4 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
         # Decoding part
         out = self.decoder(out)
 
-        output_dict["prediction"] = out
-
-        return output_dict
+        return out
