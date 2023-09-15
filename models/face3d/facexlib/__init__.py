@@ -84,3 +84,7 @@ def init_alignment_model(model_name, half=False, model_rootpath=None):
     ms.load_param_into_net(model, param_dict)
     model.set_train(False)
     return model
+
+
+def init_parsing_model():
+    pass
