@@ -99,19 +99,18 @@ python inference.py --source_image examples/source_image/people_0.png --driven_a
 
 ## Examples
 1. Chinese
-   
-https://github.com/hqkate/sadtalker/assets/26082447/c6d5ad40-ea66-4931-bec6-7cb60971c671
+
+https://github.com/hqkate/sadtalker/assets/26082447/5730e6d3-fed1-4be6-b672-e6a9eb7cdeb8
  
 2. English
 
-https://github.com/hqkate/sadtalker/assets/26082447/58dda8be-1ca3-4bc1-a711-162fa682ddbe
+https://github.com/hqkate/sadtalker/assets/26082447/a2ecbf7d-cde4-4fb7-b6d4-6301b679e75b
 
 3. Singing
    
 https://github.com/hqkate/sadtalker/assets/26082447/2c713067-f64e-45a7-9ce2-bc57f340bdad
 
-
 4. Reference (videos by Pytorch)
 
-https://github.com/hqkate/sadtalker/assets/26082447/29f8bca2-eca0-4b04-bd4a-648f4dd6ae95
+https://github.com/hqkate/sadtalker/assets/26082447/3de109c8-7231-42c6-9b3d-f150ecd251fa
 
