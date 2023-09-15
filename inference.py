@@ -44,22 +44,6 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/", preproces
     return sadtalker_paths
 
 
-def read_batch_from_pkl(data_file, convert2ts=True):
-    import pickle
-    import mindspore as ms
-    import numpy as np
-
-    with open(data_file, 'rb') as handle:
-        data = pickle.load(handle)
-
-    if convert2ts:
-        for k, v in data.items():
-            if isinstance(v, np.ndarray):
-                data[k] = ms.Tensor(v, ms.float32)
-
-    return data
-
-
 def main(args):
     context.set_context(mode=context.PYNATIVE_MODE,
                         device_target="Ascend", device_id=7)
