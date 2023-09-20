@@ -2,15 +2,13 @@ import cv2
 import os
 import mindspore as ms
 import mindspore.dataset.vision as vision
-from models.gfpgan.utils import img2tensor, tensor2img
-from models.face3d.facexlib.face_restoration_helper import FaceRestoreHelper
-# from torchvision.transforms.functional import normalize # TODO !!!
 
+from models.face3d.facexlib.face_restoration_helper import FaceRestoreHelper
+from models.gfpgan.utils import img2tensor, tensor2img
 from models.gfpgan.archs.gfpgan_bilinear_arch import GFPGANBilinear
 from models.gfpgan.archs.gfpganv1_arch import GFPGANv1
 from models.gfpgan.archs.gfpganv1_clean_arch import GFPGANv1Clean
 
-from tools.save_ms_params import save_params
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
