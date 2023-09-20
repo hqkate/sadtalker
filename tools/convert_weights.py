@@ -252,7 +252,43 @@ def convert_kpextractor():
                   "checkpoints/ms/ms_kp_extractor.ckpt", ms2pt)
 
 
+def convert_gfpgan():
+    from models.gfpgan.gfpganer import GFPGANer
+
+    model_path = None
+    arch = 'clean'
+    channel_multiplier = 2
+    bg_upsampler = None
+
+    restorer = GFPGANer(
+        model_path=model_path,
+        upscale=2,
+        arch=arch,
+        channel_multiplier=channel_multiplier,
+        bg_upsampler=bg_upsampler)
+
+    net = restorer.gfpgan
+
+    ms_params = net.get_parameters()
+    with open("pickles/pt_weights_gfpgan.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_gfpgan.ckpt")
+
+
+def convert_parsing():
+    from models.face3d.facexlib.parsenet import ParseNet
+    model = ParseNet(in_size=512, out_size=512, parsing_ch=19)
+    ms_params = model.get_parameters()
+    with open("pickles/pt_weights_parsing.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "gfpgan/weights/parsing_parsenet.ckpt")
+
+
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
                         device_target="CPU", device_id=2)
-    convert_mapping()
+    convert_parsing()

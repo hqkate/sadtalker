@@ -1,11 +1,13 @@
 """
 source: https://github.com/xinntao/facexlib/blob/master/facexlib/alignment/convert_98_to_68_landmarks.py
 """
+import os
 from copy import deepcopy
 import numpy as np
 import mindspore as ms
 from .retinaface import RetinaFace
 from .awing_fan import FAN
+from .parsenet import ParseNet
 
 
 def landmark_98_to_68(landmark_98):
@@ -58,17 +60,18 @@ def landmark_98_to_68(landmark_98):
 def init_detection_model(model_name, half=False, model_rootpath=None):
     if model_name == 'retinaface_resnet50':
         model = RetinaFace(network_name='resnet50', half=half)
-        model_path = 'checkpoints/ms/ms_det_retinaface.ckpt'
+        model_path = 'gfpgan/weights/detection_Resnet50_Final.ckpt'
     else:
         raise NotImplementedError(f'{model_name} is not implemented.')
 
-    param_dict = ms.load_checkpoint(model_path)
-    # remove unnecessary 'module.'
-    for k, v in deepcopy(param_dict).items():
-        if k.startswith('module.'):
-            param_dict[k[7:]] = v
-            param_dict.pop(k)
-    ms.load_param_into_net(model, param_dict)
+    if os.path.exists(model_path):
+        param_dict = ms.load_checkpoint(model_path)
+        # remove unnecessary 'module.'
+        for k, v in deepcopy(param_dict).items():
+            if k.startswith('module.'):
+                param_dict[k[7:]] = v
+                param_dict.pop(k)
+        ms.load_param_into_net(model, param_dict)
     model.set_train(False)
     return model
 
@@ -76,11 +79,33 @@ def init_detection_model(model_name, half=False, model_rootpath=None):
 def init_alignment_model(model_name, half=False, model_rootpath=None):
     if model_name == 'awing_fan':
         model = FAN(num_modules=4, num_landmarks=98)
-        model_path = 'checkpoints/ms/ms_detector_fan.ckpt'
+        model_path = 'gfpgan/weights/alignment_WFLW_4HG.ckpt'
     else:
         raise NotImplementedError(f'{model_name} is not implemented.')
 
-    param_dict = ms.load_checkpoint(model_path)
-    ms.load_param_into_net(model, param_dict)
+    if os.path.exists(model_path):
+        param_dict = ms.load_checkpoint(model_path)
+        ms.load_param_into_net(model, param_dict)
     model.set_train(False)
+    return model
+
+
+def init_parsing_model(model_name='bisenet', half=False, model_rootpath=None):
+    if model_name == 'bisenet':
+        model = BiSeNet(num_class=19)
+        model_path = 'checkpoints/ms/parsing_bisenet.ckpt'
+        # model_url = 'https://github.com/xinntao/facexlib/releases/download/v0.2.0/parsing_bisenet.pth'
+    elif model_name == 'parsenet':
+        model = ParseNet(in_size=512, out_size=512, parsing_ch=19)
+        model_path = 'gfpgan/weights/parsing_parsenet.ckpt'
+        # model_url = 'https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth'
+    else:
+        raise NotImplementedError(f'{model_name} is not implemented.')
+
+    if os.path.exists(model_path):
+        param_dict = ms.load_checkpoint(model_path)
+        ms.load_param_into_net(model, param_dict)
+        print(f"loaded the pretrained model from {model_path}.")
+    model.set_train(False)
+
     return model

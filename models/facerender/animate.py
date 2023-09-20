@@ -16,8 +16,6 @@ from utils.face_enhancer import enhancer_generator_with_len, enhancer_list
 from utils.paste_pic import paste_pic
 from utils.videoio import save_video_with_watermark
 
-from tools.save_ms_params import save_params
-
 
 def load_cpk_facevid2vid(checkpoint_path, generator=None,
                          kp_detector=None, he_estimator=None):
@@ -35,28 +33,6 @@ def load_cpk_facevid2vid(checkpoint_path, generator=None,
     if he_estimator_path is not None:
         estimator_params = ms.load_checkpoint(he_estimator_path)
         ms.load_param_into_net(he_estimator, estimator_params)
-    # if discriminator is not None:
-    #     try:
-    #         ms.load_param_into_net(discriminator, checkpoint['discriminator'])
-    #     except:
-    #         print(
-    #             'No discriminator in the state-dict. Dicriminator will be randomly initialized')
-    # if optimizer_generator is not None:
-    #     ms.load_param_into_net(optimizer_generator,
-    #                            checkpoint['optimizer_generator'])
-    # if optimizer_discriminator is not None:
-    #     try:
-    #         ms.load_param_into_net(
-    #             optimizer_discriminator, checkpoint['optimizer_discriminator'])
-    #     except RuntimeError as e:
-    #         print(
-    #             'No discriminator optimizer in the state-dict. Optimizer will be not initialized')
-    # if optimizer_kp_detector is not None:
-    #     ms.load_param_into_net(optimizer_kp_detector,
-    #                            checkpoint['optimizer_kp_detector'])
-    # if optimizer_he_estimator is not None:
-    #     ms.load_param_into_net(optimizer_he_estimator,
-    #                            checkpoint['optimizer_he_estimator'])
 
 
 def load_cpk_mapping(checkpoint_path, mapping):
@@ -145,6 +121,7 @@ class AnimateFromCoeff():
             image = predictions_video[idx]
             image = np.transpose(image.asnumpy(), [1, 2, 0]).astype(np.float32)
             video.append(image)
+
         result = img_as_ubyte(video)
 
         # the generated video is 256x256, so we keep the aspect ratio,
@@ -203,6 +180,7 @@ class AnimateFromCoeff():
                     full_video_path, method=enhancer, bg_upsampler=background_enhancer)
                 imageio.mimsave(
                     enhanced_path, enhanced_images_gen_with_len, fps=float(25))
+
             except:
                 enhanced_images_gen_with_len = enhancer_list(
                     full_video_path, method=enhancer, bg_upsampler=background_enhancer)

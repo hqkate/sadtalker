@@ -1,7 +1,7 @@
 import os
 import cv2
 from tqdm import tqdm
-# from models.gfpgan.gfpganer import GFPGANer
+from models.gfpgan.gfpganer import GFPGANer
 from utils.videoio import load_video_to_cv2
 
 
@@ -57,11 +57,13 @@ def enhancer_generator_no_len(images, method='gfpgan', bg_upsampler='realesrgan'
     elif method == 'RestoreFormer':
         arch = 'RestoreFormer'
         channel_multiplier = 2
+        raise Exception("RestoreFormer is still under development.")
         model_name = 'RestoreFormer'
         url = 'https://github.com/TencentARC/GFPGAN/releases/download/v1.3.4/RestoreFormer.pth'
     elif method == 'codeformer':  # TODO:
         arch = 'CodeFormer'
         channel_multiplier = 2
+        raise Exception("CodeFormer is still under development.")
         model_name = 'CodeFormer'
         url = 'https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth'
     else:
@@ -85,10 +87,7 @@ def enhancer_generator_no_len(images, method='gfpgan', bg_upsampler='realesrgan'
         bg_upsampler = None
 
     # determine model paths
-    model_path = os.path.join('gfpgan/weights', model_name + '.pth')
-
-    if not os.path.isfile(model_path):
-        model_path = os.path.join('checkpoints', model_name + '.pth')
+    model_path = os.path.join('gfpgan/weights', model_name + '.ckpt')
 
     if not os.path.isfile(model_path):
         # download pre-trained models from url

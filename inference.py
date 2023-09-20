@@ -45,10 +45,10 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/", preproces
 
 
 def main(args):
-    context.set_context(mode=context.PYNATIVE_MODE,
-                        device_target="Ascend", device_id=7)
-    # context.set_context(mode=context.GRAPH_MODE,
+    # context.set_context(mode=context.PYNATIVE_MODE,
     #                     device_target="Ascend", device_id=7)
+    context.set_context(mode=context.GRAPH_MODE,
+                        device_target="Ascend", device_id=7)
 
     pic_path = args.source_image
     audio_path = args.driven_audio
@@ -184,8 +184,6 @@ if __name__ == '__main__':
                         'crop', 'extcrop', 'resize', 'full', 'extfull'], help="how to preprocess the images")
     parser.add_argument("--verbose", action="store_true",
                         help="saving the intermedia output or not")
-    parser.add_argument("--old_version", action="store_true",
-                        help="use the pth other than safetensor version")
 
     # net structure and parameters
     parser.add_argument('--net_recon', type=str, default='resnet50',
