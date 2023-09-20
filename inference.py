@@ -45,10 +45,10 @@ def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/", preproces
 
 
 def main(args):
-    context.set_context(mode=context.PYNATIVE_MODE,
-                        device_target="Ascend", device_id=7)
-    # context.set_context(mode=context.GRAPH_MODE,
+    # context.set_context(mode=context.PYNATIVE_MODE,
     #                     device_target="Ascend", device_id=7)
+    context.set_context(mode=context.GRAPH_MODE,
+                        device_target="Ascend", device_id=7)
 
     pic_path = args.source_image
     audio_path = args.driven_audio

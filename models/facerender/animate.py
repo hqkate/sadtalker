@@ -140,11 +140,14 @@ class AnimateFromCoeff():
             (-1,)+predictions_video.shape[2:])
         predictions_video = predictions_video[:frame_num]
 
+        # predictions_video = ms.Tensor(np.load("pickles/predictions_torch.npy"))
+
         video = []
         for idx in range(predictions_video.shape[0]):
             image = predictions_video[idx]
             image = np.transpose(image.asnumpy(), [1, 2, 0]).astype(np.float32)
             video.append(image)
+
         result = img_as_ubyte(video)
 
         # the generated video is 256x256, so we keep the aspect ratio,
@@ -199,10 +202,12 @@ class AnimateFromCoeff():
             return_path = av_path_enhancer
 
             try:
+                full_video_path = "results/test_enhancer.mp4"
                 enhanced_images_gen_with_len = enhancer_generator_with_len(
                     full_video_path, method=enhancer, bg_upsampler=background_enhancer)
                 imageio.mimsave(
                     enhanced_path, enhanced_images_gen_with_len, fps=float(25))
+
             except:
                 enhanced_images_gen_with_len = enhancer_list(
                     full_video_path, method=enhancer, bg_upsampler=background_enhancer)
