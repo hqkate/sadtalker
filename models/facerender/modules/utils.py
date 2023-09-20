@@ -313,7 +313,7 @@ class SameBlock2d(nn.Cell):
                               kernel_size=kernel_size, pad_mode='pad', padding=padding, group=groups, has_bias=True)
         self.norm = BatchNorm2d(out_features, affine=True)
         if lrelu:
-            self.ac = nn.LeakyReLU()
+            self.ac = nn.LeakyReLU(0.01)
         else:
             self.ac = nn.ReLU()
 
