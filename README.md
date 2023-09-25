@@ -31,14 +31,18 @@ Data Structure:
     ├── ms
     │   ├── ms_audio2exp.ckpt
     │   ├── ms_audio2pose.ckpt
-    │   ├── ms_detector_fan.ckpt
-    │   ├── ms_det_retinaface.ckpt
     │   ├── ms_generator.ckpt
     │   ├── ms_he_estimator.ckpt
     │   ├── ms_kp_extractor.ckpt
     │   ├── ms_mapping.ckpt
     │   ├── ms_mapping_full.ckpt
     │   └── ms_net_recon.ckpt
+    gfpgan/
+    └── weights
+        ├── alignment_WFLW_4HG.ckpt
+        ├── detection_Resnet50_Final.ckpt
+        ├── GFPGANv1.4.ckpt
+        └── parsing_parsenet.ckpt
     examples/
     ├── driven_audio
     │   ├── bus_chinese.wav
@@ -112,5 +116,14 @@ https://github.com/hqkate/sadtalker/assets/26082447/2c713067-f64e-45a7-9ce2-bc57
 
 4. Reference (videos by Pytorch)
 
+- PyTorch with `SynchronizedBatchNorm`:
+
 https://github.com/hqkate/sadtalker/assets/26082447/3de109c8-7231-42c6-9b3d-f150ecd251fa
 
+
+- PyTorch with `nn.BatchNorm`:
+
+https://github.com/hqkate/sadtalker/assets/26082447/731afe73-e69f-47b4-8e36-6da7be308046
+
+
+https://github.com/hqkate/sadtalker/assets/26082447/34071866-af30-4520-99d2-fd5a3262f976
