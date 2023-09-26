@@ -104,8 +104,10 @@ python inference.py --source_image examples/source_image/people_0.png --driven_a
 ## Examples
 1. Chinese
 
-https://github.com/hqkate/sadtalker/assets/26082447/5730e6d3-fed1-4be6-b672-e6a9eb7cdeb8
- 
+
+https://github.com/hqkate/sadtalker/assets/26082447/fc20924f-9d42-4432-8f7a-2f8094c23662
+
+
 2. English
 
 https://github.com/hqkate/sadtalker/assets/26082447/a2ecbf7d-cde4-4fb7-b6d4-6301b679e75b
