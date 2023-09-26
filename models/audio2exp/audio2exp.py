@@ -1,4 +1,6 @@
 from tqdm import tqdm
+import cv2
+import mindspore as ms
 from mindspore import nn, ops
 from models.utils.load_models import load_wav2lip, load_net_recon, load_facerender
 
@@ -7,16 +9,13 @@ class Audio2Exp(nn.Cell):
     """ ExpNet implementation (training)
     """
 
-    def __init__(self, netG, cfg, is_train=False):
+    def __init__(self, netG, cfg, wav2lip=None, is_train=False):
         super(Audio2Exp, self).__init__()
         self.cfg = cfg
         self.netG = netG
 
         self.is_train = is_train
-        if is_train:
-            self.wav2lip = load_wav2lip()
-            self.net_recon = load_net_recon()
-            self.facerender = load_facerender()
+        self.wav2lip = wav2lip
 
     def test(self, batch):
 
@@ -47,13 +46,15 @@ class Audio2Exp(nn.Cell):
         }
         return results_dict
 
-    def construct(self, batch):
-
-        import pdb; pdb.set_trace()
+    def getloss(self, batch):
 
         mel_input = batch['indiv_mels']                         # bs T 1 80 16
+        pic_name = batch['pic_name']
         bs = mel_input.shape[0]
         T = mel_input.shape[1]
+
+        import pdb; pdb.set_trace()
+        first_frame_img = ms.Tensor(cv2.imread(pic_name), dtype=ms.float32).unsqueeze(0).repeat(T, axis=0)
 
         exp_coeff_pred = []
         wav2lip_coeff = []
@@ -75,7 +76,8 @@ class Audio2Exp(nn.Cell):
             exp_coeff_pred += [curr_exp_coeff_pred]
 
             # wav2lip
-            import pdb; pdb.set_trace()
+
+            img_with_lip = self.wav2lip(audiox, first_frame_img)
             full_coeff = self.net_recon(self.wav2lip(audiox, first_mel_input))
             wav2lip_coeff += [full_coeff]
 
