@@ -1,14 +1,22 @@
 from tqdm import tqdm
 from mindspore import nn, ops
+from models.utils.load_models import load_wav2lip, load_net_recon, load_facerender
 
 
 class Audio2Exp(nn.Cell):
     """ ExpNet implementation (training)
     """
-    def __init__(self, netG, cfg, prepare_training_loss=False):
+
+    def __init__(self, netG, cfg, is_train=False):
         super(Audio2Exp, self).__init__()
         self.cfg = cfg
         self.netG = netG
+
+        self.is_train = is_train
+        if is_train:
+            self.wav2lip = load_wav2lip()
+            self.net_recon = load_net_recon()
+            self.facerender = load_facerender()
 
     def test(self, batch):
 
@@ -18,21 +26,65 @@ class Audio2Exp(nn.Cell):
 
         exp_coeff_pred = []
 
-        for i in tqdm(range(0, T, 10),'audio2exp:'): # every 10 frames
+        for i in tqdm(range(0, T, 10), 'audio2exp:'):  # every 10 frames
 
-            current_mel_input = mel_input[:,i:i+10]
+            current_mel_input = mel_input[:, i:i+10]
 
-            #ref = batch['ref'][:, :, :64].repeat((1,current_mel_input.shape[1],1))           #bs T 64
+            # ref = batch['ref'][:, :, :64].repeat((1,current_mel_input.shape[1],1))           #bs T 64
             ref = batch['ref'][:, :, :64][:, i:i+10]
-            ratio = batch['ratio_gt'][:, i:i+10]                               #bs T
+            ratio = batch['ratio_gt'][:, i:i+10]  # bs T
 
-            audiox = current_mel_input.view(-1, 1, 80, 16)                  # bs*T 1 80 16
-            curr_exp_coeff_pred  = self.netG(audiox, ref, ratio)         # bs T 64
+            # bs*T 1 80 16
+            audiox = current_mel_input.view(-1, 1, 80, 16)
+            curr_exp_coeff_pred = self.netG(
+                audiox, ref, ratio)         # bs T 64
 
             exp_coeff_pred += [curr_exp_coeff_pred]
 
         # BS x T x 64
         results_dict = {
             'exp_coeff_pred': ops.cat(exp_coeff_pred, axis=1)
-            }
+        }
+        return results_dict
+
+    def construct(self, batch):
+
+        import pdb; pdb.set_trace()
+
+        mel_input = batch['indiv_mels']                         # bs T 1 80 16
+        bs = mel_input.shape[0]
+        T = mel_input.shape[1]
+
+        exp_coeff_pred = []
+        wav2lip_coeff = []
+
+        for i in tqdm(range(0, T, 10), 'audio2exp:'):  # every 10 frames
+
+            current_mel_input = mel_input[:, i:i+10]
+            first_mel_input = mel_input[:, i]
+
+            # ref = batch['ref'][:, :, :64].repeat((1,current_mel_input.shape[1],1))           #bs T 64
+            ref = batch['ref'][:, :, :64][:, i:i+10]
+            ratio = batch['ratio_gt'][:, i:i+10]  # bs T
+
+            # bs*T 1 80 16
+            audiox = current_mel_input.view(-1, 1, 80, 16)
+            curr_exp_coeff_pred = self.netG(
+                audiox, ref, ratio)         # bs T 64
+
+            exp_coeff_pred += [curr_exp_coeff_pred]
+
+            # wav2lip
+            import pdb; pdb.set_trace()
+            full_coeff = self.net_recon(self.wav2lip(audiox, first_mel_input))
+            wav2lip_coeff += [full_coeff]
+
+            # reconstruct coeffs
+
+        # BS x T x 64
+        results_dict = {
+            'exp_coeff_pred': ops.cat(exp_coeff_pred, axis=1),
+            'wav2lip_coef': ops.cat(wav2lip_coeff, axis=1),
+        }
+
         return results_dict

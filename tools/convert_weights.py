@@ -288,7 +288,19 @@ def convert_parsing():
                   "gfpgan/weights/parsing_parsenet.ckpt")
 
 
+def convert_wav2lip():
+    from models.audio2exp.wav2lip import Wav2Lip
+
+    model = Wav2Lip()
+    ms_params = model.get_parameters()
+    with open("pickles/pt_weights_wav2lip.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_wav2lip.ckpt")
+
+
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
                         device_target="CPU", device_id=2)
-    convert_parsing()
+    convert_wav2lip()

@@ -20,7 +20,7 @@ def load_cpk(checkpoint_path, model):
 
 class Audio2Coeff():
 
-    def __init__(self, sadtalker_path):
+    def __init__(self, sadtalker_path, is_train=False):
         # load config
         fcfg_pose = open(sadtalker_path['audio2pose_yaml_path'])
         cfg_pose = CN.load_cfg(fcfg_pose)
@@ -28,6 +28,8 @@ class Audio2Coeff():
         fcfg_exp = open(sadtalker_path['audio2exp_yaml_path'])
         cfg_exp = CN.load_cfg(fcfg_exp)
         cfg_exp.freeze()
+
+        self.is_train = is_train
 
         # load audio2pose_model
         self.audio2pose_model = Audio2Pose(cfg_pose)
