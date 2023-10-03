@@ -40,12 +40,16 @@ class Wav2Lip(nn.Cell):
 
         self.audio_encoder = nn.SequentialCell(
             Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
-            Conv2d(32, 32, kernel_size=3, stride=1, padding=1, use_residual=True),
-            Conv2d(32, 32, kernel_size=3, stride=1, padding=1, use_residual=True),
+            Conv2d(32, 32, kernel_size=3, stride=1,
+                   padding=1, use_residual=True),
+            Conv2d(32, 32, kernel_size=3, stride=1,
+                   padding=1, use_residual=True),
 
             Conv2d(32, 64, kernel_size=3, stride=(3, 1), padding=1),
-            Conv2d(64, 64, kernel_size=3, stride=1, padding=1, use_residual=True),
-            Conv2d(64, 64, kernel_size=3, stride=1, padding=1, use_residual=True),
+            Conv2d(64, 64, kernel_size=3, stride=1,
+                   padding=1, use_residual=True),
+            Conv2d(64, 64, kernel_size=3, stride=1,
+                   padding=1, use_residual=True),
 
             Conv2d(64, 128, kernel_size=3, stride=3, padding=1),
             Conv2d(128, 128, kernel_size=3, stride=1,
@@ -119,12 +123,9 @@ class Wav2Lip(nn.Cell):
         x = audio_embedding
         for f in self.face_decoder_blocks:
             x = f(x)
-            try:
+
+            if x.shape[0] == feats[-1].shape[0] and x.shape[2] == feats[-1].shape[2] and x.shape[3] == feats[-1].shape[3]:
                 x = ops.cat((x, feats[-1]), axis=1)
-            except Exception as e:
-                print(x.shape)
-                print(feats[-1].shape)
-                raise e
 
             feats.pop()
 
@@ -164,19 +165,22 @@ class Wav2Lip_disc_qual(nn.Cell):
                               nonorm_Conv2d(512, 512, kernel_size=3, stride=1, padding=1),),
 
             nn.SequentialCell(nonorm_Conv2d(512, 512, kernel_size=3, stride=1, padding=0),     # 1, 1
-                              nonorm_Conv2d(512, 512, kernel_size=1, stride=1, padding=0)),])
+                              nonorm_Conv2d(512, 512, kernel_size=1, stride=1, padding=0))])
 
         self.binary_pred = nn.SequentialCell(
-            nn.Conv2d(512, 1, kernel_size=1, stride=1, padding=0), nn.Sigmoid())
+            nn.Conv2d(512, 1, kernel_size=1, stride=1, padding=0),
+            nn.Sigmoid()
+        )
         self.label_noise = .0
 
     def get_lower_half(self, face_sequences):
         return face_sequences[:, :, face_sequences.shape[2]//2:]
 
     def to_2d(self, face_sequences):
-        B = face_sequences.shape[0]
         face_sequences = ops.cat([face_sequences[:, :, i]
-                                  for i in range(face_sequences.shape[2])], axis=0)
+                                  for i in range(face_sequences.shape[2])],
+                                 axis=0
+                                 )
         return face_sequences
 
     def perceptual_forward(self, false_face_sequences):
@@ -187,8 +191,10 @@ class Wav2Lip_disc_qual(nn.Cell):
         for f in self.face_encoder_blocks:
             false_feats = f(false_feats)
 
-        false_pred_loss = ops.binary_cross_entropy(self.binary_pred(false_feats).view(len(false_feats), -1),
-                                                   ops.ones((len(false_feats), 1)))
+        false_pred_loss = ops.binary_cross_entropy(
+            self.binary_pred(false_feats).view(len(false_feats), -1),
+            ops.ones((len(false_feats), 1))
+        )
 
         return false_pred_loss
 
