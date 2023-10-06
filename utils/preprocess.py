@@ -32,14 +32,7 @@ def split_coeff(coeffs):
     angles = coeffs[:, 224: 227]
     gammas = coeffs[:, 227: 254]
     translations = coeffs[:, 254:]
-    return {
-        'id': id_coeffs,
-        'exp': exp_coeffs,
-        'tex': tex_coeffs,
-        'angle': angles,
-        'gamma': gammas,
-        'trans': translations
-    }
+    return (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
 
 
 class CropAndExtract():
@@ -163,12 +156,13 @@ class CropAndExtract():
                 full_coeff = self.net_recon(im_t)
                 coeffs = split_coeff(full_coeff)
 
-                pred_coeff = {key: coeffs[key].asnumpy() for key in coeffs}
+                pred_coeff = [coef.asnumpy() for coef in coeffs]
+                # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
 
                 pred_coeff = np.concatenate([
-                    pred_coeff['exp'],
-                    pred_coeff['angle'],
-                    pred_coeff['trans'],
+                    pred_coeff[1],
+                    pred_coeff[3],
+                    pred_coeff[5],
                     trans_params[2:][None],
                 ], 1)
                 video_coeffs.append(pred_coeff)

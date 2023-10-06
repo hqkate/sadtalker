@@ -1,18 +1,23 @@
 import os
 import sys
 import shutil
+import cv2
 from time import strftime
 from yacs.config import CfgNode as CN
 import mindspore as ms
-from mindspore import context
+from mindspore import context, nn
 from mindspore.amp import auto_mixed_precision
-from utils.generate_batch import get_data
+from datasets.generate_batch import get_data
+from datasets.dataset_wrapper import DatasetWrapper
 from utils.preprocess import CropAndExtract
 from models.audio2exp.expnet import ExpNet
 from models.audio2exp.wav2lip import Wav2Lip
 from models.audio2exp.audio2exp import Audio2Exp
 from argparse import ArgumentParser
 from models.face3d.networks import define_net_recon
+from losses.expnet_loss import ExpNetLoss, DebugLoss
+from utils.model_wrapper import NetWithLossWrapper
+from utils.callbacks import EvalSaveCallback
 
 
 def init_path(checkpoint_dir="./checkpoints/", config_dir="./config/", preprocess='crop'):
@@ -50,7 +55,7 @@ def main(args):
     # context.set_context(mode=context.PYNATIVE_MODE,
     #                     device_target="Ascend", device_id=7)
     context.set_context(mode=context.GRAPH_MODE,
-                        device_target="Ascend", device_id=7)
+                        device_target="Ascend", device_id=6)
 
     pic_path = args.source_image
     audio_path = args.driven_audio
@@ -105,8 +110,8 @@ def main(args):
     first_frame_dir = os.path.join(save_dir, 'first_frame_dir')
     os.makedirs(first_frame_dir, exist_ok=True)
     print('3DMM Extraction for source image')
-    first_coeff_path, crop_pic_path, crop_info = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
-                                                                           source_image_flag=True, pic_size=args.size)
+    first_coeff_path, _, _ = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
+                                                       source_image_flag=True, pic_size=args.size)
 
     if first_coeff_path is None:
         print("Can't get the coeffs of the input")
@@ -138,13 +143,65 @@ def main(args):
         ref_pose_coeff_path = None
 
     # audio2ceoff
+    batch_size = 1
     batch = get_data(first_coeff_path, audio_path,
                      ref_eyeblink_coeff_path, still=args.still)
+    dataset = DatasetWrapper(batch)
+    dataset_column_names = dataset.get_output_columns()
+    ds = ms.dataset.GeneratorDataset(
+        dataset,
+        column_names=dataset_column_names,
+        shuffle=True
+    )
+    dataloader = ds.batch(
+        batch_size,
+        drop_remainder=True,
+    )
 
-    batch['pic_name'] = os.path.join(
-        first_frame_dir, batch['pic_name'] + '.png')
+    # create loss
+    loss_fn = ExpNetLoss()
+    # loss_fn = DebugLoss()
 
-    results_dicts = audio2exp_model.getloss(batch)
+    net_with_loss = NetWithLossWrapper(
+        audio2exp_model,
+        loss_fn
+    )
+
+    # get loss scales
+    loss_scale_manager = nn.FixedLossScaleUpdateCell(128)
+
+    # lr scheduler
+    min_lr = 0.0
+    max_lr = 0.0005
+    num_epochs = 2
+    decay_epoch = 2
+    total_step = len(batch) * num_epochs
+    step_per_epoch = len(batch)
+    lr_scheduler = nn.cosine_decay_lr(
+        min_lr, max_lr, total_step, step_per_epoch, decay_epoch)
+
+    # build optimizer
+    optimizer = nn.AdamWeightDecay(
+        audio2exp_model.trainable_params(), learning_rate=max_lr)
+
+    # build train step cell
+    train_network = nn.TrainOneStepCell(
+        net_with_loss, optimizer)
+
+    # build callbacks
+    eval_cb = EvalSaveCallback(
+        train_network
+    )
+
+    # training
+    model = ms.Model(train_network)
+    model.train(
+        num_epochs,
+        dataloader,
+        callbacks=[eval_cb],
+        dataset_sink_mode=False,
+        initial_epoch=0,
+    )
 
 
 if __name__ == '__main__':

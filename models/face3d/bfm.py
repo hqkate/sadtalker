@@ -313,7 +313,7 @@ class ParametricFaceModel:
 
         return face_vertex, face_texture, face_color, landmark
 
-    def compute_for_render_landmarks(self, coef_dict):
+    def compute_for_render_landmarks(self, coeffs, new_exp=None):
         """
         Return:
             face_vertex     -- torch.tensor, size (B, N, 3), in camera coordinate
@@ -322,12 +322,14 @@ class ParametricFaceModel:
         Parameters:
             coeffs          -- torch.tensor, size (B, 257)
         """
-        # coef_dict = self.split_coeff(coeffs)
-        face_shape = self.compute_shape(coef_dict['id'], coef_dict['exp'])
-        rotation = self.compute_rotation(coef_dict['angle'])
+        id_coeffs, exp_coeffs, _, angles, _, translations = coeffs
+        if new_exp is not None:
+            exp_coeffs = new_exp
+        face_shape = self.compute_shape(id_coeffs, exp_coeffs)
+        rotation = self.compute_rotation(angles)
 
         face_shape_transformed = self.transform(
-            face_shape, rotation, coef_dict['trans'])
+            face_shape, rotation, translations)
         face_vertex = self.to_camera(face_shape_transformed)
 
         face_proj = self.to_image(face_vertex)

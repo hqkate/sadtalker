@@ -6,8 +6,8 @@ import mindspore as ms
 from mindspore import context
 from mindspore.amp import auto_mixed_precision
 from utils.preprocess import CropAndExtract
-from utils.generate_batch import get_data
-from utils.generate_facerender_batch import get_facerender_data
+from datasets.generate_batch import get_data
+from datasets.generate_facerender_batch import get_facerender_data
 from models.audio2coeff import Audio2Coeff
 from models.facerender.animate import AnimateFromCoeff
 from argparse import ArgumentParser

@@ -1,5 +1,6 @@
 from tqdm import tqdm
 import cv2
+import copy
 import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
@@ -50,67 +51,72 @@ class Audio2Exp(nn.Cell):
         }
         return results_dict
 
-    def getloss(self, batch):
+    def construct(self, batch):
+        current_mel_input = batch['indiv_mels']
+        curr_ref = batch['ref']
+        ratio = batch['ratio_gt']
+        first_frame_img = batch['first_frame_img']
 
-        mel_input = batch['indiv_mels']                         # bs T 1 80 16
-        pic_name = batch['pic_name']
-        bs = mel_input.shape[0]
-        T = mel_input.shape[1]
+        # bs*T 1 80 16
+        audiox = current_mel_input.view(-1, 1, 80, 16)
+        curr_exp_coeff_pred = self.netG(
+            audiox, curr_ref, ratio)         # bs T 64
 
-        img = cv2.imread(pic_name)
-        img = np.asarray([cv2.resize(img, (96, 96))] * bs)
+        # wav2lip
+        img_with_lip = self.wav2lip(
+            audiox, first_frame_img)  # bs*T, 3, 96, 96
+        full_coeff = self.coeff_enc(img_with_lip)
 
-        img_masked = img.copy()
-        img_masked[:, 96 // 2:] = 0
-        img_input = np.concatenate((img_masked, img), axis=3) / 255.
-        first_frame_img = ms.Tensor(np.transpose(
-            img_input, (0, 3, 1, 2)), dtype=ms.float32)
+        return (curr_exp_coeff_pred, full_coeff, ratio)
+
+    def construct_old(self, batch):
+
+        indiv_mels = batch['indiv_mels']
+        ref = batch['ref']
+        ratio_gt = batch['ratio_gt']
+        first_frame_img = batch['first_frame_img']
+        T = batch['num_frames'].asnumpy()
 
         exp_coeff_pred = []
         wav2lip_coeff = []
         landmarks_ori = []
         landmarks_rep = []
+        ratio = []
 
         for i in tqdm(range(0, T, 10), 'audio2exp:'):  # every 10 frames
 
-            current_mel_input = mel_input[:, i:i+10]
+            current_mel_input = indiv_mels[:, i:i+10]
 
-            # ref = batch['ref'][:, :, :64].repeat((1,current_mel_input.shape[1],1))           #bs T 64
-            ref = batch['ref'][:, :, :64][:, i:i+10]
-            ratio = batch['ratio_gt'][:, i:i+10]  # bs T
+            if current_mel_input.shape[1] == 10:
+                # ref = batch['ref'][:, :, :64].repeat((1,current_mel_input.shape[1],1))           #bs T 64
+                curr_ref = ref[:, :, :64][:, i:i+10]
+                ratio = ratio_gt[:, i:i+10]  # bs T
 
-            # bs*T 1 80 16
-            audiox = current_mel_input.view(-1, 1, 80, 16)
-            curr_exp_coeff_pred = self.netG(
-                audiox, ref, ratio)         # bs T 64
+                # bs*T 1 80 16
+                audiox = current_mel_input.view(-1, 1, 80, 16)
+                curr_exp_coeff_pred = self.netG(
+                    audiox, curr_ref, ratio)         # bs T 64
 
-            exp_coeff_pred += [curr_exp_coeff_pred]
+                exp_coeff_pred += [curr_exp_coeff_pred]
 
-            # wav2lip
-            curr_first_frame_img = first_frame_img.repeat(
-                audiox.shape[0], axis=0)  # sample every 10 frames
-            img_with_lip = self.wav2lip(
-                audiox, curr_first_frame_img)  # T, 3, 96, 96
-            full_coeff = self.coeff_enc(img_with_lip)
-            coeffs = split_coeff(full_coeff)
-            exp_coeffs = coeffs['exp']
-            wav2lip_coeff += [exp_coeffs]
+                # wav2lip
+                img_with_lip = self.wav2lip(
+                    audiox, first_frame_img)  # T, 3, 96, 96
+                full_coeff = self.coeff_enc(img_with_lip)
+                coeffs = split_coeff(full_coeff)
+                exp_coeffs = coeffs['exp']
+                wav2lip_coeff += [exp_coeffs]
 
-            # reconstruct coeffs
-            landmarks = self.bfm.compute_for_render_landmarks(coeffs)
-            landmarks_ori.append(landmarks)
+                # reconstruct coeffs
+                landmarks = self.bfm.compute_for_render_landmarks(coeffs)
+                landmarks_ori.append(landmarks)
 
-            coeffs['exp'] = curr_exp_coeff_pred.squeeze(0)
-            landmarks_new = self.bfm.compute_for_render_landmarks(coeffs)
-            landmarks_rep.append(landmarks_new)
+                coeffs['exp'] = curr_exp_coeff_pred.squeeze(0)
+                landmarks_new = self.bfm.compute_for_render_landmarks(coeffs)
+                landmarks_rep.append(landmarks_new)
 
         # BS x T x 64
-        results_dict = {
-            'exp_coeff_pred': exp_coeff_pred,
-            'wav2lip_coef': wav2lip_coeff,
-            'landmarks_ori': landmarks_ori,
-            'landmarks_rep': landmarks_rep,
-            'ratio_gt': ratio,
-        }
+        results = (exp_coeff_pred, wav2lip_coeff,
+                   landmarks_ori, landmarks_rep, ratio)
 
-        return results_dict
+        return results
