@@ -31,6 +31,14 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1, bias: bool = False
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, has_bias=bias)
 
 
+class Swish(nn.Cell):
+    """Construct an Swish object."""
+
+    def construct(self, x):
+        """Return Swich activation function."""
+        return x * ops.sigmoid(x)
+
+
 class BasicBlock(nn.Cell):
     expansion: int = 1
 
@@ -44,6 +52,7 @@ class BasicBlock(nn.Cell):
         base_width: int = 64,
         dilation: int = 1,
         norm_layer: Optional[Callable[..., nn.Cell]] = None,
+        relu_type: str = 'relu',
     ) -> None:
         super().__init__()
         if norm_layer is None:
@@ -62,6 +71,20 @@ class BasicBlock(nn.Cell):
         self.bn2 = norm_layer(planes)
         self.downsample = downsample
         self.stride = stride
+
+        # type of ReLU is an input option
+        if relu_type == 'relu':
+            self.relu1 = nn.ReLU()
+            self.relu2 = nn.ReLU()
+        elif relu_type == 'prelu':
+            self.relu1 = nn.PReLU(channel=planes)
+            self.relu2 = nn.PReLU(channel=planes)
+        elif relu_type == 'swish':
+            self.relu1 = Swish()
+            self.relu2 = Swish()
+        else:
+            raise Exception('relu type not implemented')
+        # --------
 
     def construct(self, x: Tensor) -> Tensor:
         identity = x
@@ -151,7 +174,9 @@ class ResNet(nn.Cell):
         groups: int = 1,
         width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
+        relu_type: str = 'relu',
         norm_layer: Optional[Callable[..., nn.Cell]] = None,
+        downsample_block: Optional[Callable[..., nn.Cell]] = None,
     ) -> None:
         super().__init__()
         if norm_layer is None:
@@ -172,11 +197,13 @@ class ResNet(nn.Cell):
         self.use_last_fc = use_last_fc
         self.groups = groups
         self.base_width = width_per_group
+        self.relu_type = relu_type
         self.conv1 = nn.Conv2d(
             3, self.inplanes, kernel_size=7, stride=2, pad_mode='pad', padding=3, has_bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU()
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, pad_mode='pad', padding=1)
+        self.maxpool = nn.MaxPool2d(
+            kernel_size=3, stride=2, pad_mode='pad', padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(
             block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
@@ -185,13 +212,15 @@ class ResNet(nn.Cell):
         self.layer4 = self._make_layer(
             block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.downsample_block = downsample_block
 
         if self.use_last_fc:
             self.fc = nn.Dense(512 * block.expansion, num_classes)
 
         for m in self.cells():
             if isinstance(m, nn.Conv2d):
-                m.weight_init = Initializer(init='HeNormal', mode='fan_out', nonlinearity='relu')
+                m.weight_init = Initializer(
+                    init='HeNormal', mode='fan_out', nonlinearity='relu')
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 m.weight_init = Initializer(init=Constant(1))
                 m.bias_init = Initializer(init=Constant(0))
@@ -223,15 +252,22 @@ class ResNet(nn.Cell):
             self.dilation *= stride
             stride = 1
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.SequentialCell(
-                conv1x1(self.inplanes, planes * block.expansion, stride),
-                norm_layer(planes * block.expansion),
-            )
+            if self.downsample_block is None:
+                downsample = nn.SequentialCell(
+                    conv1x1(self.inplanes, planes * block.expansion, stride),
+                    norm_layer(planes * block.expansion),
+                )
+            else:
+                downsample = self.downsample_block(inplanes=self.inplanes,
+                                                   outplanes=planes * block.expansion,
+                                                   stride=stride)
 
         layers = []
         layers.append(
             block(
-                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer
+                self.inplanes, planes, stride, downsample,
+                self.groups, self.base_width, previous_dilation,
+                norm_layer, relu_type=self.relu_type,
             )
         )
         self.inplanes = planes * block.expansion
@@ -244,6 +280,7 @@ class ResNet(nn.Cell):
                     base_width=self.base_width,
                     dilation=self.dilation,
                     norm_layer=norm_layer,
+                    relu_type=self.relu_type,
                 )
             )
 
@@ -289,7 +326,7 @@ def _resnet(
     return model
 
 
-def resnet50(*, weights = None, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnet50(*, weights=None, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-50 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
