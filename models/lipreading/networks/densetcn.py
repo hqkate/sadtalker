@@ -2,6 +2,7 @@ import mindspore as ms
 from mindspore import nn, ops
 from collections import OrderedDict
 from models.lipreading.networks.resnet1d import Swish
+import numpy as np
 
 
 class Chomp1d(nn.Cell):
@@ -25,11 +26,11 @@ class TemporalConvLayer(nn.Cell):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, relu_type):
         super(TemporalConvLayer, self).__init__()
         self.net = nn.SequentialCell(
-            nn.Conv1d(n_inputs, n_outputs, kernel_size,
-                      stride=stride, padding=padding, dilation=dilation),
+            nn.Conv1d(n_inputs, n_outputs, kernel_size, pad_mode='pad',
+                      stride=stride, padding=padding, dilation=dilation, has_bias=True),
             nn.BatchNorm1d(n_outputs),
             Chomp1d(padding, True),
-            nn.PReLU(num_parameters=n_outputs) if relu_type == 'prelu' else Swish() if relu_type == 'swish' else nn.ReLU(),)
+            nn.PReLU(channel=n_outputs) if relu_type == 'prelu' else Swish() if relu_type == 'swish' else nn.ReLU(),)
 
     def construct(self, x):
         return self.net(x)
@@ -45,28 +46,28 @@ class _ConvBatchChompRelu(nn.Cell):
 
         for k_idx, k in enumerate(kernel_size_set):
             if se_module:
-                from lipreading.models.se_module import SELayer
+                from models.lipreading.networks.se_module import SELayer
                 setattr(self, 'cbcr0_se_{}'.format(k_idx),
                         SELayer(n_inputs, reduction=16))
             cbcr = TemporalConvLayer(
                 n_inputs, self.n_outputs_branch, k, stride, dilation, (k-1)*dilation, relu_type)
             setattr(self, 'cbcr0_{}'.format(k_idx), cbcr)
-        self.dropout0 = nn.Dropout(dropout)
+        self.dropout0 = nn.Dropout(p=dropout)
         for k_idx, k in enumerate(kernel_size_set):
             cbcr = TemporalConvLayer(
                 n_outputs, self.n_outputs_branch, k, stride, dilation, (k-1)*dilation, relu_type)
             setattr(self, 'cbcr1_{}'.format(k_idx), cbcr)
-        self.dropout1 = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(p=dropout)
 
         self.se_module = se_module
         self.downsample = nn.Conv1d(
-            n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
+            n_inputs, n_outputs, 1, has_bias=True) if n_inputs != n_outputs else None
 
         # final relu
         if relu_type == 'relu':
             self.relu_final = nn.ReLU()
         elif relu_type == 'prelu':
-            self.relu_final = nn.PReLU(num_parameters=n_outputs)
+            self.relu_final = nn.PReLU(channel=n_outputs)
         elif relu_type == 'swish':
             self.relu_final = Swish()
 
@@ -103,7 +104,7 @@ class _ConvBatchChompRelu(nn.Cell):
         return bottleneck_output
 
 
-class _DenseBlock(nn.ModuleDict):
+class _DenseBlock(nn.Cell):
     _version = 2
 
     def __init__(self, num_layers, num_input_features, growth_rate,
@@ -111,6 +112,8 @@ class _DenseBlock(nn.ModuleDict):
                  dropout, relu_type, squeeze_excitation,
                  ):
         super(_DenseBlock, self).__init__()
+        self.num_layers = num_layers
+
         for i in range(num_layers):
             dilation_size = dilation_size_set[i % len(dilation_size_set)]
             layer = _ConvBatchChompRelu(
@@ -124,29 +127,32 @@ class _DenseBlock(nn.ModuleDict):
                 se_module=squeeze_excitation,
             )
 
-            self.add_module('denselayer%d' % (i + 1), layer)
+            setattr(self, 'denselayer%d' % (i + 1), layer)
+            # self.add_module('denselayer%d' % (i + 1), layer)
 
     def construct(self, init_features):
         features = [init_features]
-        for name, layer in self.items():
+        for i in range(self.num_layers):
+            layer = getattr(self, 'denselayer%d' % (i + 1))
             new_features = layer(features)
             features.append(new_features)
-        return ops.cat(features, 1)
+        output = ops.cat(features, 1).astype(ms.float32)
+        return output
 
 
 class _Transition(nn.SequentialCell):
     def __init__(self, num_input_features, num_output_features, relu_type):
         super(_Transition, self).__init__()
-        self.add_module('conv', nn.Conv1d(num_input_features, num_output_features,
-                                          kernel_size=1, stride=1, bias=False))
-        self.add_module('norm', nn.BatchNorm1d(num_output_features))
+        self.append(nn.Conv1d(num_input_features, num_output_features,
+                              kernel_size=1, stride=1, has_bias=False))
+        self.append(nn.BatchNorm1d(num_output_features))
         if relu_type == 'relu':
-            self.add_module('relu', nn.ReLU())
+            self.append(nn.ReLU())
         elif relu_type == 'prelu':
-            self.add_module('prelu', nn.PReLU(
-                num_parameters=num_output_features))
+            self.append(nn.PReLU(
+                channel=num_output_features))
         elif relu_type == 'swish':
-            self.add_module('swish', Swish())
+            self.append(Swish())
 
 
 class DenseTemporalConvNet(nn.Cell):
@@ -156,12 +162,13 @@ class DenseTemporalConvNet(nn.Cell):
                  squeeze_excitation=False,
                  ):
         super(DenseTemporalConvNet, self).__init__()
-        self.features = nn.SequentialCell(OrderedDict([]))
+        features = nn.SequentialCell()
 
         trans = _Transition(num_input_features=input_size,
                             num_output_features=reduced_size,
                             relu_type='prelu')
-        self.features.add_module('transition%d' % (0), trans)
+        # self.features.add_module('transition%d' % (0), trans)
+        features.append(trans)
         num_features = reduced_size
 
         for i, num_layers in enumerate(block_config):
@@ -176,18 +183,22 @@ class DenseTemporalConvNet(nn.Cell):
                 relu_type=relu_type,
                 squeeze_excitation=squeeze_excitation,
             )
-            self.features.add_module('denseblock%d' % (i + 1), block)
+            # self.features.add_module('denseblock%d' % (i + 1), block)
+            features.append(block)
             num_features = num_features + num_layers * growth_rate_set[i]
 
             if i != len(block_config) - 1:
                 trans = _Transition(num_input_features=num_features,
                                     num_output_features=reduced_size,
                                     relu_type=relu_type)
-                self.features.add_module('transition%d' % (i + 1), trans)
+                # self.features.add_module('transition%d' % (i + 1), trans)
+                features.append(trans)
                 num_features = reduced_size
 
         # Final batch norm
-        self.features.add_module('norm5', nn.BatchNorm1d(num_features))
+        # self.features.add_module('norm5', nn.BatchNorm1d(num_features))
+        features.append(nn.BatchNorm1d(num_features))
+        self.features = features
 
     def construct(self, x):
         features = self.features(x)

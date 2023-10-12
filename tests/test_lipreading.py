@@ -1,7 +1,11 @@
 import os
 import json
 import argparse
+import numpy as np
+import mindspore as ms
+from mindspore import ops, context
 from models.lipreading.model import Lipreading
+from tools.save_ms_params import save_params
 
 
 def load_json(json_fp):
@@ -216,8 +220,8 @@ def load_args(default_config=None):
 
 def calculateNorm2(model):
     para_norm = 0.0
-    for p in model.parameters():
-        para_norm += p.data.norm(2)
+    for p in model.get_parameters():
+        para_norm += p.value().norm(ord=2)
     print("2-norm of the neural network: {:.4f}".format(para_norm**0.5))
 
 
@@ -265,10 +269,38 @@ def get_model_from_json(args):
         use_boundary=args.use_boundary,
         extract_feats=args.extract_feats,
     )
-    calculateNorm2(model)
     return model
 
 
 def main():
+
+    context.set_context(mode=context.GRAPH_MODE,
+                        device_target="CPU", device_id=2)
+
     args = load_args()
     model = get_model_from_json(args)
+
+    if args.modality == "video":
+        model_path = "checkpoints/lipreading/ms_resnet18_dctcn_video.ckpt"
+    else:
+        model_path = "checkpoints/lipreading/ms_resnet18_dctcn_audio.ckpt"
+
+    param_dict = ms.load_checkpoint(model_path)
+    ms.load_param_into_net(model, param_dict)
+    model.set_train(False)
+
+    # input_np = np.random.rand(1, 1, 29, 88, 88)
+    # np.save("input_np.npy", input_np)
+    input_np = np.load("input_np.npy")
+    input_tensor = ms.Tensor(input_np, ms.float32)
+    logits = model(input_tensor, [640])
+
+    # _, preds = ops.max(ops.softmax(logits, axis=1), axis=1)
+    # sentence = labels.view_as(preds)
+
+    print(logits)
+    # save_params(model, "tools/parameters/lipreading_params.txt")
+
+
+if __name__=="__main__":
+    main()

@@ -18,7 +18,8 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
         # 在参数列表中，只有包含bn和downsample.1的参数是BatchNorm算子的参数
 
         # if "conv_block.1." in ms_param.name:
-        if any(x in ms_param.name and "mlp_gamma" not in ms_param.name and "mlp_beta" not in ms_param.name for x in bn_ms2pt.keys()):
+        # if any(x in ms_param.name and "mlp_gamma" not in ms_param.name and "mlp_beta" not in ms_param.name for x in bn_ms2pt.keys()):
+        if True:
             # ms_param_item = ms_param.name.split(".")
             # pt_param_item = ms_param_item[:-1] + [bn_ms2pt[ms_param_item[-1]]]
             # pt_param = ".".join(pt_param_item)
@@ -33,6 +34,10 @@ def param_convert(ms_params, pt_params, ckpt_path, extra_dict=None):
                 ms_value = pt_params[pt_param]
                 new_params_list.append(
                     {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32)})
+            elif pt_param in pt_params and "weight" in ms_param.name:
+                ms_value = pt_params[pt_param]
+                new_params_list.append(
+                    {"name": ms_param.name, "data": ms.Tensor(ms_value, ms.float32).unsqueeze(2)})
             else:
                 print(ms_param.name, "not match in pt_params")
         # 其他参数
@@ -300,7 +305,30 @@ def convert_wav2lip():
                   "checkpoints/ms/ms_wav2lip.ckpt")
 
 
+def convert_lipreading():
+    from tests.test_lipreading import load_args, get_model_from_json
+
+    ms2pt = {}
+    with open("tools/lipreading_mapping.txt", "r") as f:
+        for line in f.readlines():
+            line = line.replace("\n", "")
+            p_torch = line.split("\t")[0]
+            p_ms = line.split("\t")[1]
+            ms2pt[p_ms] = p_torch
+    ms2pt[".bn2d"] = ""
+
+    args = load_args()
+    model = get_model_from_json(args)
+    ms_params = model.get_parameters()
+
+    with open("pickles/lrw_resnet18_dctcn_audio.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/lipreading/ms_resnet18_dctcn_audio.ckpt", ms2pt)
+
+
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
                         device_target="CPU", device_id=2)
-    convert_wav2lip()
+    convert_lipreading()

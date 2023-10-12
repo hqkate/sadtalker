@@ -6,7 +6,7 @@ from mindspore.common.initializer import Initializer, Constant
 
 def conv3x3(in_planes, out_planes, stride=1):
     return nn.Conv1d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, has_bias=False)
+                     pad_mode='pad', padding=1, has_bias=False)
 
 
 def downsample_basic_block(inplanes, outplanes, stride):
@@ -35,7 +35,7 @@ class Swish(nn.Cell):
         return x * ops.sigmoid(x)
 
 
-class BasicBlock1D(nn.Module):
+class BasicBlock1D(nn.Cell):
     expansion = 1
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, relu_type='relu'):

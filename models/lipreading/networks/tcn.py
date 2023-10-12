@@ -27,16 +27,14 @@ class ConvBatchChompRelu(nn.Cell):
             self.conv = nn.SequentialCell(
                 # -- dw
                 nn.Conv1d(n_inputs, n_inputs, kernel_size, stride=stride, pad_mode='pad',
-                          padding=padding, dilation=dilation, groups=n_inputs, bias=False),
+                          padding=padding, dilation=dilation, groups=n_inputs, has_bias=False),
                 nn.BatchNorm1d(n_inputs),
                 Chomp1d(padding, True),
-                nn.PReLU(channel=n_inputs) if relu_type == 'prelu' else nn.ReLU(
-                    inplace=True),
+                nn.PReLU(channel=n_inputs) if relu_type == 'prelu' else nn.ReLU(),
                 # -- pw
                 nn.Conv1d(n_inputs, n_outputs, 1, 1, 0, has_bias=False),
                 nn.BatchNorm1d(n_outputs),
-                nn.PReLU(channel=n_outputs) if relu_type == 'prelu' else nn.ReLU(
-                    inplace=True)
+                nn.PReLU(channel=n_outputs) if relu_type == 'prelu' else nn.ReLU()
             )
         else:
             self.conv = nn.Conv1d(n_inputs, n_outputs, kernel_size,
@@ -70,13 +68,13 @@ class MultibranchTemporalBlock(nn.Cell):
             cbcr = ConvBatchChompRelu(n_inputs, self.n_outputs_branch,
                                       k, stride, dilation, padding[k_idx], relu_type, dwpw=dwpw)
             setattr(self, 'cbcr0_{}'.format(k_idx), cbcr)
-        self.dropout0 = nn.Dropout(1 - dropout)
+        self.dropout0 = nn.Dropout(p=dropout)
 
         for k_idx, k in enumerate(self.kernel_sizes):
             cbcr = ConvBatchChompRelu(n_outputs, self.n_outputs_branch,
                                       k, stride, dilation, padding[k_idx], relu_type, dwpw=dwpw)
             setattr(self, 'cbcr1_{}'.format(k_idx), cbcr)
-        self.dropout1 = nn.Dropout(1 - dropout)
+        self.dropout1 = nn.Dropout(p=dropout)
 
         # downsample?
         self.downsample = nn.Conv1d(n_inputs, n_outputs, 1) if (
@@ -165,7 +163,7 @@ class TemporalBlock(nn.Cell):
                 nn.BatchNorm1d(n_outputs),
                 nn.PReLU(channel=n_outputs) if relu_type == 'prelu' else Swish(
                 ) if relu_type == 'swish' else nn.ReLU(),
-                nn.Dropout(1 - dropout),
+                nn.Dropout(p=dropout),
                 # -- second conv set within block
                 # -- dw
                 nn.Conv1d(n_outputs, n_outputs, kernel_size, stride=stride, pad_mode='pad',
@@ -179,7 +177,7 @@ class TemporalBlock(nn.Cell):
                 nn.BatchNorm1d(n_outputs),
                 nn.PReLU(channel=n_outputs) if relu_type == 'prelu' else Swish(
                 ) if relu_type == 'swish' else nn.ReLU(),
-                nn.Dropout(1 - dropout),
+                nn.Dropout(p=dropout),
             )
         else:
             self.conv1 = nn.Conv1d(n_inputs, n_outputs, kernel_size,
@@ -193,7 +191,7 @@ class TemporalBlock(nn.Cell):
                 self.relu1 = nn.PReLU(channel=n_outputs)
             elif relu_type == 'swish':
                 self.relu1 = Swish()
-            self.dropout1 = nn.Dropout(1 - dropout)
+            self.dropout1 = nn.Dropout(p=dropout)
 
             self.conv2 = nn.Conv1d(n_outputs, n_outputs, kernel_size, pad_mode='pad',
                                    stride=stride, padding=padding, dilation=dilation)
@@ -206,7 +204,7 @@ class TemporalBlock(nn.Cell):
                 self.relu2 = nn.PReLU(channel=n_outputs)
             elif relu_type == 'swish':
                 self.relu2 = Swish()
-            self.dropout2 = nn.Dropout(1 - dropout)
+            self.dropout2 = nn.Dropout(p=dropout)
 
             if self.no_padding:
                 self.net = nn.SequentialCell(self.conv1, self.batchnorm1, self.relu1, self.dropout1,

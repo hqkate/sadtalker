@@ -198,12 +198,15 @@ class ResNet(nn.Cell):
         self.groups = groups
         self.base_width = width_per_group
         self.relu_type = relu_type
+        self.downsample_block = downsample_block
+
         self.conv1 = nn.Conv2d(
             3, self.inplanes, kernel_size=7, stride=2, pad_mode='pad', padding=3, has_bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(
             kernel_size=3, stride=2, pad_mode='pad', padding=1)
+
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(
             block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
@@ -212,7 +215,6 @@ class ResNet(nn.Cell):
         self.layer4 = self._make_layer(
             block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.downsample_block = downsample_block
 
         if self.use_last_fc:
             self.fc = nn.Dense(512 * block.expansion, num_classes)

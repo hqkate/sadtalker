@@ -7,7 +7,7 @@
 import mindspore as ms
 from mindspore import nn, ops
 
-from models.lipreading.networks.resnet import get_lipreading_resnet, BasicBlock
+from models.lipreading.networks.resnet import ResNet, BasicBlock
 from models.lipreading.networks.resnet1d import ResNet1D, BasicBlock1D, Swish
 # from models.lipreading.networks.shufflenetv2 import ShuffleNetV2
 from models.lipreading.networks.tcn import MultibranchTemporalConvNet, TemporalConvNet
@@ -17,11 +17,11 @@ from models.lipreading.networks.densetcn import DenseTemporalConvNet
 # -- auxiliary functions
 def threeD_to_2D_tensor(x):
     n_batch, n_channels, s_time, sx, sy = x.shape
-    x = x.transpose(1, 2)
+    x = ops.transpose(x, (0, 2, 1, 3, 4))
     return x.reshape(n_batch*s_time, n_channels, sx, sy)
 
 
-def _average_batch(x, lengths):
+def _average_batch(x, lengths, B):
     return ops.stack([ops.mean(x[index][:, 0:i], 1) for index, i in enumerate(lengths)], 0)
 
 
@@ -40,7 +40,7 @@ class MultiscaleMultibranchTCN(nn.Cell):
 
     def construct(self, x, lengths, B):
         # x needs to have dimension (N, C, L) in order to be passed into CNN
-        xtrans = x.transpose(1, 2)
+        xtrans = ops.transpose(x, (0, 2, 1))
         out = self.mb_ms_tcn(xtrans)
         out = self.consensus_func(out, lengths)
         return self.tcn_output(out)
@@ -63,7 +63,7 @@ class TCN(nn.Cell):
 
     def construct(self, x, lengths, B):
         # x needs to have dimension (N, C, L) in order to be passed into CNN
-        x = self.tcn_trunk(x.transpose(1, 2))
+        x = self.tcn_trunk(ops.transpose(x, (0, 2, 1)))
         x = self.consensus_func(x, lengths, B)
         return self.tcn_output(x)
 
@@ -86,7 +86,7 @@ class DenseTCN(nn.Cell):
         self.consensus_func = _average_batch
 
     def construct(self, x, lengths, B):
-        x = self.tcn_trunk(x.transpose(1, 2))
+        x = self.tcn_trunk(ops.transpose(x, (0, 2, 1)))
         x = self.consensus_func(x, lengths, B)
         return self.tcn_output(x)
 
@@ -110,8 +110,7 @@ class Lipreading(nn.Cell):
             if self.backbone_type == 'resnet':
                 self.frontend_nout = 64
                 self.backend_out = 512
-                self.trunk = get_lipreading_resnet(
-                    BasicBlock, [2, 2, 2, 2], relu_type=relu_type)
+                self.trunk = ResNet(BasicBlock, [2, 2, 2, 2], relu_type=relu_type)
             else:
                 raise NotImplementedError(
                     f"unsupported backbone type {self.backbone_type}.")
@@ -135,8 +134,8 @@ class Lipreading(nn.Cell):
 
             self.frontend3D = nn.SequentialCell(
                 nn.Conv3d(1, self.frontend_nout, kernel_size=(5, 7, 7),
-                          stride=(1, 2, 2), pad_mode='pad', padding=(2, 3, 3), bias=False),
-                nn.BatchNorm3d(self.frontend_nout),
+                          stride=(1, 2, 2), pad_mode='pad', padding=(2, 2, 3, 3, 3, 3), has_bias=False),
+                nn.BatchNorm3d(self.frontend_nout, eps=1e-5),
                 frontend_relu,
                 nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 2, 2), pad_mode='pad', padding=(0, 1, 1)))
         else:
@@ -170,6 +169,7 @@ class Lipreading(nn.Cell):
             raise NotImplementedError
 
     def construct(self, x, lengths, boundaries=None):
+        B = 1
         if self.modality == 'video':
             B, C, T, H, W = x.shape
             x = self.frontend3D(x)
@@ -179,11 +179,11 @@ class Lipreading(nn.Cell):
 
             if self.backbone_type == 'shufflenet':
                 x = x.view(-1, self.stage_out_channels)
-            x = x.view(B, Tnew, x.size(1))
+            x = x.view(B, Tnew, x.shape[1])
         elif self.modality == 'audio':
             B, C, T = x.shape
             x = self.trunk(x)
-            x = x.transpose(1, 2)
+            x = ops.transpose(x, (0, 2, 1))
             lengths = [_//640 for _ in lengths]
 
         # -- duration
