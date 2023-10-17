@@ -11,12 +11,12 @@
 3) cropping a fixed 96 × 96 pixels wide ROI from the aligned face image so that the mouth region is always roughly centered on the image crop
 4) transform the cropped image to gray level
 """
-
+import os
 import cv2
 import pickle
 import numpy as np
 from transform import *
-from utils import *
+from utils import load_video, load_audio
 
 
 class AVSRDataLoader(object):
@@ -65,7 +65,7 @@ class AVSRDataLoader(object):
         # -- Step 1, extract landmarks from pkl files.
         if isinstance(landmarks_pathname, str):
             with open(landmarks_pathname, "rb") as pkl_file:
-                landmarks = pickle.load(pkl_file)
+                landmarks = pickle.load(pkl_file) # List: [(68, 2) * 29]
         else:
             landmarks = landmarks_pathname
         # -- Step 2, pre-process landmarks: interpolate frames that not being detected.
@@ -80,7 +80,7 @@ class AVSRDataLoader(object):
         sequence, transformed_frame, transformed_landmarks = self.crop_patch(
             video_pathname, preprocessed_landmarks
         )
-        assert sequence is not None, "cannot crop from {}.".format(filename)
+        assert sequence is not None, "cannot crop from {}.".format(video_pathname)
         return sequence
 
     def landmarks_interpolate(self, landmarks):
@@ -255,3 +255,11 @@ class AVSRDataLoader(object):
             return self.load_audio(data_filename)
         elif modality == "video":
             return self.load_video(data_filename, landmarks_filename=landmarks_filename)
+
+
+if __name__=="__main__":
+    modality = "video"
+    data_filename = "examples/lipreading/AFTERNOON_00001.mp4"
+    landmarks_filename = "examples/lipreading/AFTERNOON_00001.pkl"
+    dataloader = AVSRDataLoader()
+    data = dataloader.load_data(modality, data_filename, landmarks_filename) # (29, 96, 96)

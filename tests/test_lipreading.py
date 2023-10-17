@@ -4,19 +4,9 @@ import argparse
 import numpy as np
 import mindspore as ms
 from mindspore import ops, context
+from models.lipreading import get_model_from_json
 from models.lipreading.model import Lipreading
 from tools.save_ms_params import save_params
-
-
-def load_json(json_fp):
-    assert os.path.isfile(
-        json_fp
-    ), "Error loading JSON. File provided does not exist, cannot read: {}".format(
-        json_fp
-    )
-    with open(json_fp, "r") as f:
-        json_content = json.load(f)
-    return json_content
 
 
 def load_args(default_config=None):
@@ -225,53 +215,6 @@ def calculateNorm2(model):
     print("2-norm of the neural network: {:.4f}".format(para_norm**0.5))
 
 
-def get_model_from_json(args):
-    assert args.config_path.endswith(".json") and os.path.isfile(
-        args.config_path
-    ), f"'.json' config path does not exist. Path input: {args.config_path}"
-    args_loaded = load_json(args.config_path)
-    args.backbone_type = args_loaded["backbone_type"]
-    args.width_mult = args_loaded["width_mult"]
-    args.relu_type = args_loaded["relu_type"]
-    args.use_boundary = args_loaded.get("use_boundary", False)
-
-    if args_loaded.get("tcn_num_layers", ""):
-        tcn_options = {
-            "num_layers": args_loaded["tcn_num_layers"],
-            "kernel_size": args_loaded["tcn_kernel_size"],
-            "dropout": args_loaded["tcn_dropout"],
-            "dwpw": args_loaded["tcn_dwpw"],
-            "width_mult": args_loaded["tcn_width_mult"],
-        }
-    else:
-        tcn_options = {}
-    if args_loaded.get("densetcn_block_config", ""):
-        densetcn_options = {
-            "block_config": args_loaded["densetcn_block_config"],
-            "growth_rate_set": args_loaded["densetcn_growth_rate_set"],
-            "reduced_size": args_loaded["densetcn_reduced_size"],
-            "kernel_size_set": args_loaded["densetcn_kernel_size_set"],
-            "dilation_size_set": args_loaded["densetcn_dilation_size_set"],
-            "squeeze_excitation": args_loaded["densetcn_se"],
-            "dropout": args_loaded["densetcn_dropout"],
-        }
-    else:
-        densetcn_options = {}
-
-    model = Lipreading(
-        modality=args.modality,
-        num_classes=args.num_classes,
-        tcn_options=tcn_options,
-        densetcn_options=densetcn_options,
-        backbone_type=args.backbone_type,
-        relu_type=args.relu_type,
-        width_mult=args.width_mult,
-        use_boundary=args.use_boundary,
-        extract_feats=args.extract_feats,
-    )
-    return model
-
-
 def main():
 
     context.set_context(mode=context.GRAPH_MODE,
@@ -289,11 +232,12 @@ def main():
     ms.load_param_into_net(model, param_dict)
     model.set_train(False)
 
-    # input_np = np.random.rand(1, 1, 29, 88, 88)
+    B = 1
+    # input_np = np.random.rand(B, 1, 29, 88, 88)
     # np.save("input_np.npy", input_np)
     input_np = np.load("input_np.npy")
     input_tensor = ms.Tensor(input_np, ms.float32)
-    logits = model(input_tensor, [640])
+    logits = model(input_tensor, [640] * B)
 
     # _, preds = ops.max(ops.softmax(logits, axis=1), axis=1)
     # sentence = labels.view_as(preds)

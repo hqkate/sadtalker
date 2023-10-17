@@ -12,7 +12,7 @@ class Audio2Exp(nn.Cell):
     """ ExpNet implementation (training)
     """
 
-    def __init__(self, netG, cfg, wav2lip=None, coeff_enc=None, coeff_dec=None, is_train=False):
+    def __init__(self, netG, cfg, wav2lip=None, coeff_enc=None, lipreading=None, is_train=False):
         super(Audio2Exp, self).__init__()
         self.cfg = cfg
         self.netG = netG
@@ -20,7 +20,6 @@ class Audio2Exp(nn.Cell):
         self.is_train = is_train
         self.wav2lip = wav2lip
         self.coeff_enc = coeff_enc
-        self.bfm = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
 
     def test(self, batch):
 

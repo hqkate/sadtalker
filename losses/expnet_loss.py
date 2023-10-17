@@ -3,6 +3,7 @@ import mindspore as ms
 from mindspore import nn, ops
 from utils.preprocess import split_coeff
 from models.face3d.bfm import ParametricFaceModel
+from models.lipreading import get_lipreading_model
 
 
 class LandmarksLoss(nn.LossBase):
@@ -45,7 +46,24 @@ class LandmarksLoss(nn.LossBase):
 
 
 class LipReadingLoss(nn.LossBase):
-    pass
+    def __init__(self, reduction='mean'):
+        super().__init__(reduction)
+        self.lipreading_video = get_lipreading_model("video")
+        self.lipreading_audio = get_lipreading_model("audio")
+
+    def preprocess_audio(self):
+        pass
+
+    def preprocess_video(self):
+        pass
+
+    def construct(self, audio_wav, video_frames, landmarks):
+
+        c_p = self.lipreading_audio(audio_wav)
+        c_gt = self.lipreading_video(video_frames, landmarks)
+
+        loss = ops.cross_entropy(c_p, c_gt)
+        return loss
 
 
 class ExpNetLoss(nn.LossBase):
@@ -53,14 +71,14 @@ class ExpNetLoss(nn.LossBase):
         super().__init__(reduction)
         self.distill_loss = nn.MSELoss()
         self.lks_loss = LandmarksLoss()
-        # self.lread_loss = LipReadingLoss()
+        self.lread_loss = LipReadingLoss()
 
         self.bfm1 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
         self.bfm2 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
 
         self.cast = ops.Cast()
 
-    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt
+    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt, audio_wav
                   ):
 
         # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
@@ -90,7 +108,7 @@ class ExpNetLoss(nn.LossBase):
         loss_lks = self.lks_loss(landmarks_ori, landmarks_rep, ratio_gt)
 
         # lip-reading loss (cross-entropy)
-        # loss_read = self.lread_loss(logits, labels)
+        loss_read = self.lread_loss(audio_wav, logits, landmarks_rep)
         loss_read = 0.0
 
         loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read

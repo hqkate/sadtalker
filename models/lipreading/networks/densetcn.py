@@ -15,11 +15,12 @@ class Chomp1d(nn.Cell):
 
     def construct(self, x):
         if self.chomp_size == 0:
-            return x
+            result = x
         if self.symm_chomp:
-            return x[:, :, self.chomp_size//2:-self.chomp_size//2]
+            result = x[:, :, self.chomp_size//2:-self.chomp_size//2]
         else:
-            return x[:, :, :-self.chomp_size]
+            result = x[:, :, :-self.chomp_size]
+        return result
 
 
 class TemporalConvLayer(nn.Cell):
@@ -74,6 +75,7 @@ class _ConvBatchChompRelu(nn.Cell):
     def bn_function(self, inputs):
         x = ops.cat(inputs, 1)
         outputs = []
+        branch_se = getattr(self, 'cbcr0_se_0')
         for k_idx in range(self.num_kernels):
             if self.se_module:
                 branch_se = getattr(self, 'cbcr0_se_{}'.format(k_idx))
@@ -132,10 +134,24 @@ class _DenseBlock(nn.Cell):
 
     def construct(self, init_features):
         features = [init_features]
-        for i in range(self.num_layers):
-            layer = getattr(self, 'denselayer%d' % (i + 1))
-            new_features = layer(features)
-            features.append(new_features)
+
+        layer1 = getattr(self, 'denselayer1')
+        new_features = layer1(features)
+        features.append(new_features)
+
+        layer2 = getattr(self, 'denselayer2')
+        new_features = layer2(features)
+        features.append(new_features)
+
+        layer3 = getattr(self, 'denselayer3')
+        new_features = layer3(features)
+        features.append(new_features)
+
+        # for i in range(self.num_layers):
+        #     layer = getattr(self, 'denselayer%d' % (i + 1))
+        #     new_features = layer(features)
+        #     features.append(new_features)
+
         output = ops.cat(features, 1).astype(ms.float32)
         return output
 
