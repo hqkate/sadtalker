@@ -66,7 +66,7 @@ class Audio2Exp(nn.Cell):
             audiox, first_frame_img)  # bs*T, 3, 96, 96
         full_coeff = self.coeff_enc(img_with_lip)
 
-        return (curr_exp_coeff_pred, full_coeff, ratio)
+        return (curr_exp_coeff_pred, full_coeff, ratio, audiox)
 
     def construct_old(self, batch):
 

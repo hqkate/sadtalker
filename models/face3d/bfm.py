@@ -76,7 +76,7 @@ class ParametricFaceModel:
             self.mean_shape = mean_shape.reshape([-1, 1])
 
         self.persc_proj = ms.Tensor(perspective_projection(focal, center))
-        self.device = 'cpu'
+        self.triangle = ms.Tensor(model['tri'].astype(np.int64))
         self.camera_distance = camera_distance
         self.SH = SH()
         self.init_lit = init_lit.reshape([1, 1, -1]).astype(np.float32)
@@ -310,6 +310,34 @@ class ParametricFaceModel:
         face_norm_roted = face_norm @ rotation
         face_color = self.compute_color(
             face_texture, face_norm_roted, coef_dict['gamma'])
+
+        return face_vertex, face_texture, face_color, landmark
+
+    def compute_for_render_new(self, coeffs):
+        """
+        Return:
+            face_vertex     -- torch.tensor, size (B, N, 3), in camera coordinate
+            face_color      -- torch.tensor, size (B, N, 3), in RGB order
+            landmark        -- torch.tensor, size (B, 68, 2), y direction is opposite to v direction
+        Parameters:
+            coeffs          -- torch.tensor, size (B, 257)
+        """
+        id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations = coeffs
+        face_shape = self.compute_shape(id_coeffs, exp_coeffs)
+        rotation = self.compute_rotation(angles)
+
+        face_shape_transformed = self.transform(
+            face_shape, rotation, translations)
+        face_vertex = self.to_camera(face_shape_transformed)
+
+        face_proj = self.to_image(face_vertex)
+        landmark = self.get_landmarks(face_proj)
+
+        face_texture = self.compute_texture(tex_coeffs)
+        face_norm = self.compute_norm(face_shape)
+        face_norm_roted = face_norm @ rotation
+        face_color = self.compute_color(
+            face_texture, face_norm_roted, gammas)
 
         return face_vertex, face_texture, face_color, landmark
 

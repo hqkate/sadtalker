@@ -4,6 +4,7 @@ from mindspore import nn, ops
 from utils.preprocess import split_coeff
 from models.face3d.bfm import ParametricFaceModel
 from models.lipreading import get_lipreading_model
+from models.external.face3d.face_renderer import renderer
 
 
 class LandmarksLoss(nn.LossBase):
@@ -50,6 +51,7 @@ class LipReadingLoss(nn.LossBase):
         super().__init__(reduction)
         self.lipreading_video = get_lipreading_model("video")
         self.lipreading_audio = get_lipreading_model("audio")
+        self.renderer = renderer
 
     def preprocess_audio(self):
         pass
@@ -57,7 +59,16 @@ class LipReadingLoss(nn.LossBase):
     def preprocess_video(self):
         pass
 
-    def construct(self, audio_wav, video_frames, landmarks):
+    def construct(self, audio_wav, face_vertex, face_color, triangle_coeffs, landmarks):
+
+        # preprocess audio
+        import pdb; pdb.set_trace()
+
+        # face rendering
+        pred_face = self.renderer(
+            face_vertex, face_color, triangle_coeffs)
+
+        # process face image
 
         c_p = self.lipreading_audio(audio_wav)
         c_gt = self.lipreading_video(video_frames, landmarks)
@@ -86,7 +97,7 @@ class ExpNetLoss(nn.LossBase):
         exp_coeff_wav2lip = coeffs[1]
 
         # reconstruct coeffs
-        landmarks_ori = self.bfm1.compute_for_render_landmarks(
+        face_vertex, face_texture, face_color, landmark_w2l = self.bfm1.compute_for_render_new(
             coeffs)  # bs*T, 68, 2
 
         new_coeffs = (
@@ -98,17 +109,18 @@ class ExpNetLoss(nn.LossBase):
             coeffs[5]
         )
 
-        landmarks_rep = self.bfm2.compute_for_render_landmarks(new_coeffs)
+        face_vertex, face_texture, face_color, landmarks_rep = self.bfm2.compute_for_render_new(
+            new_coeffs)
 
         # distill loss (lip-only coefficients, MSE)
         loss_distill = self.distill_loss(
             exp_coeff_pred.view(-1, 64), exp_coeff_wav2lip)
 
         # landmarks loss (eyes)
-        loss_lks = self.lks_loss(landmarks_ori, landmarks_rep, ratio_gt)
+        loss_lks = self.lks_loss(landmark_w2l, landmarks_rep, ratio_gt)
 
         # lip-reading loss (cross-entropy)
-        loss_read = self.lread_loss(audio_wav, logits, landmarks_rep)
+        loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, landmarks_rep)
         loss_read = 0.0
 
         loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
