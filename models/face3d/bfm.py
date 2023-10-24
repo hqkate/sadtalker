@@ -9,6 +9,12 @@ from scipy.io import loadmat
 from models.face3d.utils import transferBFM09
 
 
+sh_a = [ms.Tensor(np.pi), ms.Tensor(2 * np.pi / np.sqrt(3.)),
+        ms.Tensor(2 * np.pi / np.sqrt(8.))]
+sh_c = [ms.Tensor(1/np.sqrt(4 * np.pi)), ms.Tensor(np.sqrt(3.) /
+        np.sqrt(4 * np.pi)), ms.Tensor(3 * np.sqrt(5.) / np.sqrt(12 * np.pi))]
+
+
 def perspective_projection(focal, center):
     # return p.T (N, 3) @ (3, 3)
     return np.array([
@@ -16,13 +22,6 @@ def perspective_projection(focal, center):
         0, focal, center,
         0, 0, 1
     ]).reshape([3, 3]).astype(np.float32).transpose()
-
-
-class SH:
-    def __init__(self):
-        self.a = [np.pi, 2 * np.pi / np.sqrt(3.), 2 * np.pi / np.sqrt(8.)]
-        self.c = [1/np.sqrt(4 * np.pi), np.sqrt(3.) /
-                  np.sqrt(4 * np.pi), 3 * np.sqrt(5.) / np.sqrt(12 * np.pi)]
 
 
 class ParametricFaceModel:
@@ -76,10 +75,11 @@ class ParametricFaceModel:
             self.mean_shape = mean_shape.reshape([-1, 1])
 
         self.persc_proj = ms.Tensor(perspective_projection(focal, center))
-        self.triangle = ms.Tensor(model['tri'].astype(np.int64))
+        self.triangle = ms.Tensor(self.face_buf.astype(np.int64))
         self.camera_distance = camera_distance
-        self.SH = SH()
-        self.init_lit = init_lit.reshape([1, 1, -1]).astype(np.float32)
+        self.sh_a = sh_a
+        self.sh_c = sh_c
+        self.init_lit = ms.Tensor(init_lit.reshape([1, 1, -1]).astype(np.float32))
 
     def compute_shape(self, id_coeff, exp_coeff):
         """
@@ -156,23 +156,25 @@ class ParametricFaceModel:
         """
         batch_size = gamma.shape[0]
         v_num = face_texture.shape[1]
-        a, c = self.SH.a, self.SH.c
+
         gamma = gamma.reshape([batch_size, 3, 9])
-        gamma = gamma + ms.Tensor(self.init_lit)
+        gamma = gamma + self.init_lit
         gamma = gamma.permute(0, 2, 1)
-        Y = ops.cat([
-            a[0] * c[0] * ops.ones_like(face_norm[..., :1]),
-            -a[1] * c[1] * face_norm[..., 1:2],
-            a[1] * c[1] * face_norm[..., 2:],
-            -a[1] * c[1] * face_norm[..., :1],
-            a[2] * c[2] * face_norm[..., :1] * face_norm[..., 1:2],
-            -a[2] * c[2] * face_norm[..., 1:2] * face_norm[..., 2:],
-            0.5 * a[2] * c[2] / np.sqrt(3.) *
-            (3 * face_norm[..., 2:] ** 2 - 1),
-            -a[2] * c[2] * face_norm[..., :1] * face_norm[..., 2:],
-            0.5 * a[2] * c[2] * (face_norm[..., :1] **
-                                 2 - face_norm[..., 1:2] ** 2)
-        ], axis=-1)
+
+        y1 = self.sh_a[0] * self.sh_c[0] * ops.ones_like(face_norm[..., :1])
+        y2 = -self.sh_a[1] * self.sh_c[1] * face_norm[..., 1:2]
+        y3 = self.sh_a[1] * self.sh_c[1] * face_norm[..., 2:]
+        y4 = -self.sh_a[1] * self.sh_c[1] * face_norm[..., :1]
+        y5 = self.sh_a[2] * self.sh_c[2] * face_norm[..., :1] * face_norm[..., 1:2]
+        y6 = -self.sh_a[2] * self.sh_c[2] * face_norm[..., 1:2] * face_norm[..., 2:]
+        y7 = ms.Tensor(0.5) * self.sh_a[2] * self.sh_c[2] / ms.Tensor(np.sqrt(3.)) * (ms.Tensor(3.0) * face_norm[..., 2:] ** 2 - ms.Tensor(1.0))
+        y8 = -self.sh_a[2] * self.sh_c[2] * face_norm[..., :1] * face_norm[..., 2:]
+        y9 = ms.Tensor(0.5) * self.sh_a[2] * self.sh_c[2] * (face_norm[..., :1] ** 2 - face_norm[..., 1:2] ** 2)
+
+        seq_y = [y1, y2, y3, y4, y5, y6, y7, y8, y9]
+        seq_y = [y.astype(ms.float32) for y in seq_y]
+        Y = ops.cat(seq_y, axis=-1)
+
         r = Y @ gamma[..., :1]
         g = Y @ gamma[..., 1:2]
         b = Y @ gamma[..., 2:]
@@ -333,13 +335,23 @@ class ParametricFaceModel:
         face_proj = self.to_image(face_vertex)
         landmark = self.get_landmarks(face_proj)
 
+        print("finished computing the landmark.")
+
         face_texture = self.compute_texture(tex_coeffs)
+
+        print("finished computing the texture.")
+
         face_norm = self.compute_norm(face_shape)
+
+        print("finished computing the norm.")
+
         face_norm_roted = face_norm @ rotation
         face_color = self.compute_color(
             face_texture, face_norm_roted, gammas)
 
-        return face_vertex, face_texture, face_color, landmark
+        print("finished computing the color.")
+
+        return face_vertex, face_texture, face_color, face_proj, landmark
 
     def compute_for_render_landmarks(self, coeffs, new_exp=None):
         """

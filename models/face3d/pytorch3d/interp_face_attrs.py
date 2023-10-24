@@ -4,17 +4,16 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import torch
-from pytorch3d import _C
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
+import mindspore as ms
+# from torch.autograd import Function
+# from torch.autograd.function import once_differentiable
 
 
 def interpolate_face_attributes(
-    pix_to_face: torch.Tensor,
-    barycentric_coords: torch.Tensor,
-    face_attributes: torch.Tensor,
-) -> torch.Tensor:
+    pix_to_face: ms.Tensor,
+    barycentric_coords: ms.Tensor,
+    face_attributes: ms.Tensor,
+) -> ms.Tensor:
     """
     Interpolate arbitrary face attributes using the barycentric coordinates
     for each pixel in the rasterized output.
@@ -61,19 +60,19 @@ def interpolate_face_attributes(
     return out
 
 
-class _InterpFaceAttrs(Function):
+class _InterpFaceAttrs():
     @staticmethod
-    def forward(ctx, pix_to_face, barycentric_coords, face_attrs):
+    def construct(ctx, pix_to_face, barycentric_coords, face_attrs):
         args = (pix_to_face, barycentric_coords, face_attrs)
         ctx.save_for_backward(*args)
         return _C.interp_face_attrs_forward(*args)
 
 
 def interpolate_face_attributes_python(
-    pix_to_face: torch.Tensor,
-    barycentric_coords: torch.Tensor,
-    face_attributes: torch.Tensor,
-) -> torch.Tensor:
+    pix_to_face: ms.Tensor,
+    barycentric_coords: ms.Tensor,
+    face_attributes: ms.Tensor,
+) -> ms.Tensor:
     F, FV, D = face_attributes.shape
     N, H, W, K, _ = barycentric_coords.shape
 

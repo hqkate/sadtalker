@@ -1503,7 +1503,7 @@ class Meshes:
     def submeshes(
         self,
         face_indices: Union[
-            List[List[torch.LongTensor]], List[torch.LongTensor], torch.LongTensor
+            List[List[ms.Tensor]], List[ms.Tensor], ms.Tensor
         ],
     ) -> "Meshes":
         """

@@ -1,6 +1,14 @@
 from typing import Any, List, Optional, Tuple, Union, Dict
-# from mindspore import nn
+import numpy as np
+import mindspore as ms
+from mindspore import nn, ops
 from models.face3d.pytorch3d.utils import TensorProperties
+from models.face3d.pytorch3d.transforms import Transform3d
+
+
+# Default values for rotation and translation matrices.
+_R = ops.eye(3)[None]  # (1, 3, 3)
+_T = ops.zeros((1, 3))  # (1, 3)
 
 
 class CamerasBase(TensorProperties):
@@ -78,7 +86,7 @@ class CamerasBase(TensorProperties):
         """
         raise NotImplementedError()
 
-    def unproject_points(self, xy_depth: torch.Tensor, **kwargs):
+    def unproject_points(self, xy_depth: ms.Tensor, **kwargs):
         """
         Transform input points from camera coodinates (NDC or screen)
         to the world / camera coordinates.
@@ -129,7 +137,7 @@ class CamerasBase(TensorProperties):
         """
         raise NotImplementedError()
 
-    def get_camera_center(self, **kwargs) -> torch.Tensor:
+    def get_camera_center(self, **kwargs) -> ms.Tensor:
         """
         Return the 3D location of the camera optical center
         in the world coordinates.
@@ -155,7 +163,7 @@ class CamerasBase(TensorProperties):
         C = P[:, 3, :3]
         return C
 
-    def get_world_to_view_transform(self, **kwargs) -> Transform3d:
+    def get_world_to_view_transform(self, **kwargs):
         """
         Return the world-to-view transform.
 
@@ -172,14 +180,14 @@ class CamerasBase(TensorProperties):
             A Transform3d object which represents a batch of transforms
             of shape (N, 3, 3)
         """
-        R: torch.Tensor = kwargs.get("R", self.R)
-        T: torch.Tensor = kwargs.get("T", self.T)
+        R: ms.Tensor = kwargs.get("R", self.R)
+        T: ms.Tensor = kwargs.get("T", self.T)
         self.R = R
         self.T = T
         world_to_view_transform = get_world_to_view_transform(R=R, T=T)
         return world_to_view_transform
 
-    def get_full_projection_transform(self, **kwargs) -> Transform3d:
+    def get_full_projection_transform(self, **kwargs):
         """
         Return the full world-to-camera transform composing the
         world-to-view and view-to-camera transforms.
@@ -199,8 +207,8 @@ class CamerasBase(TensorProperties):
             a Transform3d object which represents a batch of transforms
             of shape (N, 3, 3)
         """
-        self.R: torch.Tensor = kwargs.get("R", self.R)
-        self.T: torch.Tensor = kwargs.get("T", self.T)
+        self.R: ms.Tensor = kwargs.get("R", self.R)
+        self.T: ms.Tensor = kwargs.get("T", self.T)
         world_to_view_transform = self.get_world_to_view_transform(
             R=self.R, T=self.T)
         view_to_proj_transform = self.get_projection_transform(**kwargs)
@@ -208,7 +216,7 @@ class CamerasBase(TensorProperties):
 
     def transform_points(
         self, points, eps: Optional[float] = None, **kwargs
-    ) -> torch.Tensor:
+    ) -> ms.Tensor:
         """
         Transform input points from world to camera space.
         If camera is defined in NDC space, the projected points are in NDC space.
@@ -236,7 +244,7 @@ class CamerasBase(TensorProperties):
         world_to_proj_transform = self.get_full_projection_transform(**kwargs)
         return world_to_proj_transform.transform_points(points, eps=eps)
 
-    def get_ndc_camera_transform(self, **kwargs) -> Transform3d:
+    def get_ndc_camera_transform(self, **kwargs):
         """
         Returns the transform from camera projection space (screen or NDC) to NDC space.
         For cameras that can be specified in screen space, this transform
@@ -252,7 +260,7 @@ class CamerasBase(TensorProperties):
         input points to the renderer to be in NDC space.
         """
         if self.in_ndc():
-            return Transform3d(device=self.device, dtype=torch.float32)
+            return Transform3d(device=self.device, dtype=ms.float32)
         else:
             # For custom cameras which can be defined in screen space,
             # users might might have to implement the screen to NDC transform based
@@ -268,7 +276,7 @@ class CamerasBase(TensorProperties):
 
     def transform_points_ndc(
         self, points, eps: Optional[float] = None, **kwargs
-    ) -> torch.Tensor:
+    ) -> ms.Tensor:
         """
         Transforms points from PyTorch3D world/camera space to NDC space.
         Input points follow the PyTorch3D coordinate system conventions: +X left, +Y up.
@@ -299,7 +307,7 @@ class CamerasBase(TensorProperties):
 
     def transform_points_screen(
         self, points, eps: Optional[float] = None, with_xyflip: bool = True, **kwargs
-    ) -> torch.Tensor:
+    ) -> ms.Tensor:
         """
         Transforms points from PyTorch3D world/camera space to screen space.
         Input points follow the PyTorch3D coordinate system conventions: +X left, +Y up.
@@ -360,7 +368,7 @@ class CamerasBase(TensorProperties):
         return getattr(self, "image_size", None)
 
     def __getitem__(
-        self, index: Union[int, List[int], torch.BoolTensor, torch.LongTensor]
+        self, index: Union[int, List[int], ms.Tensor]
     ) -> "CamerasBase":
         """
         Override for the __getitem__ method in TensorProperties which needs to be
@@ -482,15 +490,14 @@ class FoVPerspectiveCameras(CamerasBase):
 
     def __init__(
         self,
-        znear: _BatchFloatType = 1.0,
-        zfar: _BatchFloatType = 100.0,
-        aspect_ratio: _BatchFloatType = 1.0,
-        fov: _BatchFloatType = 60.0,
+        znear = 1.0,
+        zfar = 100.0,
+        aspect_ratio = 1.0,
+        fov = 60.0,
         degrees: bool = True,
-        R: torch.Tensor = _R,
-        T: torch.Tensor = _T,
-        K: Optional[torch.Tensor] = None,
-        device: Device = "cpu",
+        R: ms.Tensor = _R,
+        T: ms.Tensor = _T,
+        K: Optional[ms.Tensor] = None,
     ) -> None:
         """
 
@@ -510,7 +517,6 @@ class FoVPerspectiveCameras(CamerasBase):
         # The initializer formats all inputs to torch tensors and broadcasts
         # all the inputs to have the same batch dimension where necessary.
         super().__init__(
-            device=device,
             znear=znear,
             zfar=zfar,
             aspect_ratio=aspect_ratio,
@@ -525,7 +531,7 @@ class FoVPerspectiveCameras(CamerasBase):
 
     def compute_projection_matrix(
         self, znear, zfar, fov, aspect_ratio, degrees: bool
-    ) -> torch.Tensor:
+    ) -> ms.Tensor:
         """
         Compute the calibration matrix K of shape (N, 4, 4)
 
@@ -540,9 +546,9 @@ class FoVPerspectiveCameras(CamerasBase):
         Returns:
             torch.FloatTensor of the calibration matrix with shape (N, 4, 4)
         """
-        K = torch.zeros((self._N, 4, 4), device=self.device,
-                        dtype=torch.float32)
-        ones = torch.ones((self._N), dtype=torch.float32, device=self.device)
+        K = ops.zeros((self._N, 4, 4),
+                        dtype=ms.float32)
+        ones = ops.ones((self._N), dtype=ms.float32)
         if degrees:
             fov = (np.pi / 180) * fov
 
@@ -636,11 +642,11 @@ class FoVPerspectiveCameras(CamerasBase):
 
     def unproject_points(
         self,
-        xy_depth: torch.Tensor,
+        xy_depth: ms.Tensor,
         world_coordinates: bool = True,
         scaled_depth_input: bool = False,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> ms.Tensor:
         """>!
         FoV cameras further allow for passing depth in world units
         (`scaled_depth_input=False`) or in the [0, 1]-normalized units
@@ -673,7 +679,7 @@ class FoVPerspectiveCameras(CamerasBase):
             # get the scaled depth
             sdepth = (f1 * xy_depth[..., 2:3] + f2) / xy_depth[..., 2:3]
             # concatenate xy + scaled depth
-            xy_sdepth = torch.cat((xy_depth[..., 0:2], sdepth), dim=-1)
+            xy_sdepth = ops.cat((xy_depth[..., 0:2], sdepth), axis=-1)
 
         # unproject with inverse of the projection
         unprojection_transform = to_ndc_transform.inverse()
@@ -688,7 +694,7 @@ class FoVPerspectiveCameras(CamerasBase):
 
 def try_get_projection_transform(
     cameras: CamerasBase, cameras_kwargs: Dict[str, Any]
-) -> Optional[Transform3d]:
+):
     """
     Try block to get projection transform from cameras and cameras_kwargs.
 

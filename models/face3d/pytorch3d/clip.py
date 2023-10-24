@@ -5,9 +5,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from typing import Any, List, Optional, Tuple
-
-import torch
-
+import mindspore as ms
+from mindspore import nn, ops
 
 """
 Mesh clipping is done before rasterization and is implemented using 4 cases
@@ -77,13 +76,13 @@ class ClippedFaces:
 
     def __init__(
         self,
-        face_verts: torch.Tensor,
-        mesh_to_face_first_idx: torch.Tensor,
-        num_faces_per_mesh: torch.Tensor,
-        faces_clipped_to_unclipped_idx: Optional[torch.Tensor] = None,
-        barycentric_conversion: Optional[torch.Tensor] = None,
-        faces_clipped_to_conversion_idx: Optional[torch.Tensor] = None,
-        clipped_faces_neighbor_idx: Optional[torch.Tensor] = None,
+        face_verts: ms.Tensor,
+        mesh_to_face_first_idx: ms.Tensor,
+        num_faces_per_mesh: ms.Tensor,
+        faces_clipped_to_unclipped_idx: Optional[ms.Tensor] = None,
+        barycentric_conversion: Optional[ms.Tensor] = None,
+        faces_clipped_to_conversion_idx: Optional[ms.Tensor] = None,
+        clipped_faces_neighbor_idx: Optional[ms.Tensor] = None,
     ) -> None:
         self.face_verts = face_verts
         self.mesh_to_face_first_idx = mesh_to_face_first_idx
@@ -151,7 +150,7 @@ class ClipFrustum:
         self.z_clip_value = z_clip_value
 
 
-def _get_culled_faces(face_verts: torch.Tensor, frustum: ClipFrustum) -> torch.Tensor:
+def _get_culled_faces(face_verts: ms.Tensor, frustum: ClipFrustum) -> ms.Tensor:
     """
     Helper function used to find all the faces in Meshes which are
     fully outside the view frustum. A face is culled if all 3 vertices are outside
@@ -177,8 +176,8 @@ def _get_culled_faces(face_verts: torch.Tensor, frustum: ClipFrustum) -> torch.T
         (frustum.znear, 2, "<"),
         (frustum.zfar, 2, ">"),
     )
-    faces_culled = torch.zeros(
-        [face_verts.shape[0]], dtype=torch.bool, device=face_verts.device
+    faces_culled = ops.zeros(
+        [face_verts.shape[0]], dtype=ms.bool_
     )
     for plane in clipping_planes:
         clip_value, axis, op = plane
@@ -196,8 +195,8 @@ def _get_culled_faces(face_verts: torch.Tensor, frustum: ClipFrustum) -> torch.T
 
 
 def _find_verts_intersecting_clipping_plane(
-    face_verts: torch.Tensor,
-    p1_face_ind: torch.Tensor,
+    face_verts: ms.Tensor,
+    p1_face_ind: ms.Tensor,
     clip_value: float,
     perspective_correct: bool,
 ) -> Tuple[Tuple[Any, Any, Any, Any, Any], List[Any]]:
@@ -249,8 +248,8 @@ def _find_verts_intersecting_clipping_plane(
     # p2_face_ind and p3_face_ind are the indices of the other two vertices preserving
     # the same counterclockwise or clockwise ordering
     T = face_verts.shape[0]
-    p2_face_ind = torch.remainder(p1_face_ind + 1, 3)
-    p3_face_ind = torch.remainder(p1_face_ind + 2, 3)
+    p2_face_ind = ops.remainder(p1_face_ind + 1, 3)
+    p3_face_ind = ops.remainder(p1_face_ind + 2, 3)
 
     # p1, p2, p3 are (T, 3) tensors storing the corresponding (x, y, z) coordinates
     # of p1_face_ind, p2_face_ind, p3_face_ind
@@ -301,8 +300,8 @@ def _find_verts_intersecting_clipping_plane(
 
     # Set the barycentric coordinates of p1,p2,p3,p4,p5 in terms of the original
     # unclipped triangle in face_verts.
-    T_idx = torch.arange(T, device=face_verts.device)
-    p_barycentric = [torch.zeros((T, 3), device=face_verts.device) for i in range(5)]
+    T_idx = ops.arange(T)
+    p_barycentric = [ops.zeros((T, 3)) for i in range(5)]
     p_barycentric[0][(T_idx, p1_face_ind)] = 1
     p_barycentric[1][(T_idx, p2_face_ind)] = 1
     p_barycentric[2][(T_idx, p3_face_ind)] = 1
@@ -320,9 +319,9 @@ def _find_verts_intersecting_clipping_plane(
 # Main Entry point
 ###################
 def clip_faces(
-    face_verts_unclipped: torch.Tensor,
-    mesh_to_face_first_idx: torch.Tensor,
-    num_faces_per_mesh: torch.Tensor,
+    face_verts_unclipped: ms.Tensor,
+    mesh_to_face_first_idx: ms.Tensor,
+    num_faces_per_mesh: ms.Tensor,
     frustum: ClipFrustum,
 ) -> ClippedFaces:
     """
@@ -609,7 +608,7 @@ def clip_faces(
 
 def convert_clipped_rasterization_to_original_faces(
     pix_to_face_clipped, bary_coords_clipped, clipped_faces: ClippedFaces
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[ms.Tensor, ms.Tensor]:
     """
     Convert rasterization Fragments (expressed as pix_to_face_clipped,
     bary_coords_clipped, dists_clipped) of clipped Meshes computed using clip_faces()
@@ -656,8 +655,8 @@ def convert_clipped_rasterization_to_original_faces(
 
     # Convert pix_to_face indices to now refer to the faces in the unclipped Meshes.
     # Init empty tensor to fill in all the background values which have pix_to_face=-1.
-    empty = torch.full(pix_to_face_clipped.shape, -1, device=device, dtype=torch.int64)
-    pix_to_face_unclipped = torch.where(
+    empty = ops.full(pix_to_face_clipped.shape, -1, dtype=ms.int64)
+    pix_to_face_unclipped = ops.where(
         pix_to_face_clipped != -1,
         faces_clipped_to_unclipped_idx[pix_to_face_clipped],
         empty,
@@ -682,7 +681,7 @@ def convert_clipped_rasterization_to_original_faces(
         # Select the subset of faces that require conversion, where N is the sum
         # number of case3/case4 triangles that are in the closest k triangles to some
         # rasterized pixel.
-        pix_to_conversion_idx = torch.where(
+        pix_to_conversion_idx = ops.where(
             pix_to_face_clipped != -1,
             faces_clipped_to_conversion_idx[pix_to_face_clipped],
             empty,

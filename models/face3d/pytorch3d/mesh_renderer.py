@@ -9,6 +9,7 @@ from mindspore import nn, ops
 from models.face3d.pytorch3d.cameras import FoVPerspectiveCameras, try_get_projection_transform
 from models.face3d.pytorch3d.interp_face_attrs import interpolate_face_attributes
 from models.face3d.pytorch3d.meshes import Meshes
+from models.face3d.pytorch3d.rasterize_meshes_python import rasterize_meshes_python
 from models.face3d.pytorch3d.clip import ClipFrustum, clip_faces, convert_clipped_rasterization_to_original_faces
 from models.face3d.pytorch3d.utils import parse_image_size
 
@@ -252,7 +253,7 @@ class MeshRasterizer(nn.Cell):
         # When blur_radius > 0, a face can be matched to a pixel that is outside the
         # face, resulting in negative barycentric coordinates.
 
-        pix_to_face, zbuf, bary_coords, dists = rasterize_meshes(
+        pix_to_face, zbuf, bary_coords, dists = rasterize_meshes_python(
             meshes_proj,
             image_size=raster_settings.image_size,
             blur_radius=raster_settings.blur_radius,
