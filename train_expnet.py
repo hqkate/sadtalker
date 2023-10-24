@@ -55,7 +55,7 @@ def main(args):
     context.set_context(mode=context.PYNATIVE_MODE,
                         device_target="CPU", device_id=7)
     # context.set_context(mode=context.GRAPH_MODE,
-    #                     device_target="Ascend", device_id=6)
+    #                     device_target="Ascend", device_id=7)
 
     pic_path = args.source_image
     audio_path = args.driven_audio
@@ -83,6 +83,7 @@ def main(args):
     wav2lip = Wav2Lip()
     param_dict = ms.load_checkpoint(sadtalker_paths['wav2lip_checkpoint'])
     ms.load_param_into_net(wav2lip, param_dict)
+    wav2lip.set_train(False)
 
     # load 3DMM Encoder
     coeff_enc = define_net_recon(
