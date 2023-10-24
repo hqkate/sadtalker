@@ -62,7 +62,7 @@ class LipReadingLoss(nn.LossBase):
     def construct(self, audio_wav, face_vertex, face_color, triangle_coeffs, landmarks):
 
         # preprocess audio
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
 
         # face rendering
         pred_face = self.renderer(
@@ -89,7 +89,7 @@ class ExpNetLoss(nn.LossBase):
 
         self.cast = ops.Cast()
 
-    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt, audio_wav
+    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt
                   ):
 
         # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
@@ -120,7 +120,7 @@ class ExpNetLoss(nn.LossBase):
         loss_lks = self.lks_loss(landmark_w2l, landmarks_rep, ratio_gt)
 
         # lip-reading loss (cross-entropy)
-        loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, landmarks_rep)
+        # loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, landmarks_rep)
         loss_read = 0.0
 
         loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read

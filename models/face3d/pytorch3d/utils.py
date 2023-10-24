@@ -1,7 +1,8 @@
 import copy
 import inspect
 import warnings
-from mindspore import nn
+from mindspore import nn, ops
+import mindspore as ms
 from typing import Any, List, Optional, Tuple, TypeVar, Union
 
 
@@ -12,8 +13,7 @@ class TensorProperties(nn.Cell):
 
     def __init__(
         self,
-        dtype: torch.dtype = torch.float32,
-        device: Device = "cpu",
+        dtype: ms.dtype = ms.float32,
         **kwargs,
     ) -> None:
         """
@@ -25,7 +25,6 @@ class TensorProperties(nn.Cell):
                 other keyword arguments are set as attributes.
         """
         super().__init__()
-        self.device = make_device(device)
         self._N = 0
         if kwargs is not None:
 
@@ -47,7 +46,7 @@ class TensorProperties(nn.Cell):
 
             if len(values) > 0:
                 broadcasted_values = convert_to_tensors_and_broadcast(
-                    *values, device=device
+                    *values
                 )
 
                 # Set broadcasted values as attributes on self.
@@ -62,7 +61,7 @@ class TensorProperties(nn.Cell):
     def isempty(self) -> bool:
         return self._N == 0
 
-    def __getitem__(self, index: Union[int, slice]) -> TensorAccessor:
+    def __getitem__(self, index: Union[int, slice]):
         """
 
         Args:
@@ -79,28 +78,6 @@ class TensorProperties(nn.Cell):
         msg = "Expected index of type int or slice; got %r"
         raise ValueError(msg % type(index))
 
-    # pyre-fixme[14]: `to` overrides method defined in `Module` inconsistently.
-    def to(self, device: Device = "cpu") -> "TensorProperties":
-        """
-        In place operation to move class properties which are tensors to a
-        specified device. If self has a property "device", update this as well.
-        """
-        device_ = make_device(device)
-        for k in dir(self):
-            v = getattr(self, k)
-            if k == "device":
-                setattr(self, k, device_)
-            if torch.is_tensor(v) and v.device != device_:
-                setattr(self, k, v.to(device_))
-        return self
-
-    def cpu(self) -> "TensorProperties":
-        return self.to("cpu")
-
-    # pyre-fixme[14]: `cuda` overrides method defined in `Module` inconsistently.
-    def cuda(self, device: Optional[int] = None) -> "TensorProperties":
-        return self.to(f"cuda:{device}" if device is not None else "cuda")
-
     def clone(self, other) -> "TensorProperties":
         """
         Update the tensor properties of other with the cloned properties of self.
@@ -109,7 +86,7 @@ class TensorProperties(nn.Cell):
             v = getattr(self, k)
             if inspect.ismethod(v) or k.startswith("__") or type(v) is TypeVar:
                 continue
-            if torch.is_tensor(v):
+            if ops.is_tensor(v):
                 v_clone = v.clone()
             else:
                 v_clone = copy.deepcopy(v)
@@ -166,7 +143,7 @@ class TensorProperties(nn.Cell):
         # Iterate through the attributes of the class which are tensors.
         for k in dir(self):
             v = getattr(self, k)
-            if torch.is_tensor(v):
+            if ops.is_tensor(v):
                 if v.shape[0] > 1:
                     # There are different values for each batch element
                     # so gather these using the batch_idx.
