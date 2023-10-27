@@ -78,7 +78,7 @@ def interpolate_face_attributes_python(
 
     # Replace empty pixels in pix_to_face with 0 in order to interpolate.
     mask = pix_to_face < 0
-    pix_to_face = pix_to_face.clone()
+    pix_to_face = pix_to_face.copy()
     pix_to_face[mask] = 0
     idx = pix_to_face.view(N * H * W * K, 1, 1).expand(N * H * W * K, 3, D)
     pixel_face_vals = face_attributes.gather(0, idx).view(N, H, W, K, 3, D)

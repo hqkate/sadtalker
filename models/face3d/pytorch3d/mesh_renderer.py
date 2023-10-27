@@ -6,6 +6,7 @@ import mindspore as ms
 from dataclasses import dataclass
 from typing import List, Optional, Union, Tuple
 from mindspore import nn, ops
+from mindspore import jit_class
 from models.face3d.pytorch3d.cameras import FoVPerspectiveCameras, try_get_projection_transform
 from models.face3d.pytorch3d.interp_face_attrs import interpolate_face_attributes
 from models.face3d.pytorch3d.meshes import Meshes
@@ -142,7 +143,8 @@ class RasterizationSettings:
     cull_to_frustum: bool = False
 
 
-class MeshRasterizer(nn.Cell):
+@jit_class
+class MeshRasterizer():
     """
     This class implements methods for rasterizing a batch of heterogeneous
     Meshes.
@@ -160,7 +162,6 @@ class MeshRasterizer(nn.Cell):
         All these initial settings can be overridden by passing keyword
         arguments to the forward function.
         """
-        super().__init__()
         if raster_settings is None:
             raster_settings = RasterizationSettings()
 
@@ -217,7 +218,7 @@ class MeshRasterizer(nn.Cell):
         meshes_ndc = meshes_world.update_padded(new_verts_padded=verts_ndc)
         return meshes_ndc
 
-    def construct(self, meshes_world, **kwargs) -> Fragments:
+    def forward_rasterizer(self, meshes_world, **kwargs) -> Fragments:
         """
         Args:
             meshes_world: a Meshes object representing a batch of meshes with
@@ -225,7 +226,9 @@ class MeshRasterizer(nn.Cell):
         Returns:
             Fragments: Rasterization outputs as a named tuple.
         """
+        print("start transform ...")
         meshes_proj = self.transform(meshes_world, **kwargs)
+        print("finished transform ...")
         raster_settings = kwargs.get("raster_settings", self.raster_settings)
 
         # By default, turn on clip_barycentric_coords if blur_radius > 0.
@@ -246,21 +249,23 @@ class MeshRasterizer(nn.Cell):
         else:
             znear = cameras.get_znear()
             if isinstance(znear, ms.Tensor):
-                znear = znear.min().item()
+                znear = znear.min()
             z_clip = None if not perspective_correct or znear is None else znear / 2
 
         # By default, turn on clip_barycentric_coords if blur_radius > 0.
         # When blur_radius > 0, a face can be matched to a pixel that is outside the
         # face, resulting in negative barycentric coordinates.
 
+        print("start rasterizidsng meshes ...")
+
         pix_to_face, zbuf, bary_coords, dists = rasterize_meshes_python(
             meshes_proj,
             image_size=raster_settings.image_size,
             blur_radius=raster_settings.blur_radius,
             faces_per_pixel=raster_settings.faces_per_pixel,
-            bin_size=raster_settings.bin_size,
-            max_faces_per_bin=raster_settings.max_faces_per_bin,
-            clip_barycentric_coords=clip_barycentric_coords,
+            # bin_size=raster_settings.bin_size,
+            # max_faces_per_bin=raster_settings.max_faces_per_bin,
+            # clip_barycentric_coords=clip_barycentric_coords,
             perspective_correct=perspective_correct,
             cull_backfaces=raster_settings.cull_backfaces,
             z_clip_value=z_clip,
@@ -275,22 +280,22 @@ class MeshRasterizer(nn.Cell):
         )
 
 
-class MeshRenderer(nn.Cell):
+@jit_class
+class MeshRenderer():
     def __init__(self,
                  rasterize_fov,
                  znear=0.1,
                  zfar=10,
                  rasterize_size=224):
-        super(MeshRenderer, self).__init__()
 
         self.rasterize_size = rasterize_size
         self.fov = rasterize_fov
         self.znear = znear
         self.zfar = zfar
 
-        self.rasterizer = None
+        self.rasterizer = MeshRasterizer()
 
-    def construct(self, vertex, tri, feat=None):
+    def forward_rendering(self, vertex, tri, feat=None):
         """
         Return:
             mask               -- ms.Tensor, size (B, 1, H, W)
@@ -307,13 +312,10 @@ class MeshRenderer(nn.Cell):
         # trans to homogeneous coordinates of 3d vertices, the direction of y is the same as v
         if vertex.shape[-1] == 3:
             vertex = ops.cat(
-                [vertex, ops.ones([*vertex.shape[:2], 1])], axis=-1)
+                [vertex, ops.ones([vertex.shape[0], vertex.shape[1], 1])], axis=-1)
             vertex[..., 0] = -vertex[..., 0]
 
         # vertex_ndc = vertex @ ndc_proj.t()
-        if self.rasterizer is None:
-            self.rasterizer = MeshRasterizer()
-            print("create rasterizer.")
 
         tri = tri.astype(ms.int32)
 
@@ -328,11 +330,14 @@ class MeshRenderer(nn.Cell):
             image_size=rsize
         )
 
-        # print(vertex.shape, tri.shape)
-        mesh = Meshes(vertex[..., :3], tri.unsqueeze(
-            0).repeat((vertex.shape[0], 1, 1)))
+        verts = ms.Tensor(vertex[..., :3].asnumpy())
+        faces = ms.Tensor(tri.unsqueeze(0).repeat(vertex.shape[0], axis=0).asnumpy())
 
-        fragments = self.rasterizer(
+        mesh = Meshes(verts, faces)
+
+        # mesh = Meshes(ops.zeros((84, 35709, 3)), ops.zeros((84, 70789, 3)))
+
+        fragments = self.rasterizer.forward_rasterizer(
             mesh, cameras=cameras, raster_settings=raster_settings)
         rast_out = fragments.pix_to_face.squeeze(-1)
         depth = fragments.zbuf
@@ -399,7 +404,7 @@ class _RasterizeFaceVerts(nn.Cell):
         cull_to_frustum: bool = True,
     ):
         # pyre-fixme[16]: Module `pytorch3d` has no attribute `_C`.
-        pix_to_face, zbuf, barycentric_coords, dists = _C.rasterize_meshes( #TODO!!!
+        pix_to_face, zbuf, barycentric_coords, dists = _C.rasterize_meshes(  # TODO!!!
             face_verts,
             mesh_to_face_first_idx,
             num_faces_per_mesh,
@@ -579,7 +584,6 @@ def rasterize_meshes(
         clipped_faces_neighbor_idx = ops.full(
             size=(face_verts.shape[0],),
             fill_value=-1,
-            device=meshes.device,
             dtype=ms.int64,
         )
 

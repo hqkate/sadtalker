@@ -186,7 +186,6 @@ def rasterize_meshes(
         clipped_faces_neighbor_idx = torch.full(
             size=(face_verts.shape[0],),
             fill_value=-1,
-            device=meshes.device,
             dtype=torch.int64,
         )
 
@@ -423,7 +422,6 @@ def rasterize_meshes_python(  # noqa: C901
     H, W = image_size if isinstance(image_size, tuple) else (image_size, image_size)
 
     K = faces_per_pixel
-    device = meshes.device
 
     verts_packed = meshes.verts_packed()
     faces_packed = meshes.faces_packed()
@@ -452,8 +450,8 @@ def rasterize_meshes_python(  # noqa: C901
         num_faces_per_mesh = clipped_faces.num_faces_per_mesh
 
     # Initialize output tensors.
-    face_idxs = torch.full(
-        (N, H, W, K), fill_value=-1, dtype=torch.int64, device=device
+    face_idxs = ops.full(
+        (N, H, W, K), fill_value=-1, dtype=ms.int64
     )
     zbuf = torch.full((N, H, W, K), fill_value=-1, dtype=torch.float32, device=device)
     bary_coords = torch.full(

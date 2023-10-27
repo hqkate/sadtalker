@@ -356,7 +356,6 @@ def clip_faces(
             coordinates for the unclipped meshes.
     """
     F = face_verts_unclipped.shape[0]
-    device = face_verts_unclipped.device
 
     # Triangles completely outside the view frustum will be culled
     # faces_culled is of shape (F, )
@@ -366,6 +365,9 @@ def clip_faces(
     # smaller triangles
     z_clip_value = frustum.z_clip_value
     perspective_correct = frustum.perspective_correct
+
+    faces_clipped_verts = ops.zeros([F])
+    faces_num_clipped_verts = 0.0
     if z_clip_value is not None:
         # (F, 3) tensor (where F is the number of triangles) marking whether each vertex
         # in a triangle is behind the clipping plane
@@ -373,12 +375,10 @@ def clip_faces(
 
         # (F) dim tensor containing the number of clipped vertices in each triangle
         faces_num_clipped_verts = faces_clipped_verts.sum(1)
-    else:
-        faces_num_clipped_verts = torch.zeros([F], device=device)
 
     # If no triangles need to be clipped or culled, avoid unnecessary computation
     # and return early
-    if faces_num_clipped_verts.sum().item() == 0 and faces_culled.sum().item() == 0:
+    if faces_num_clipped_verts.sum() == 0 and faces_culled.sum() == 0:
         return ClippedFaces(
             face_verts=face_verts_unclipped,
             mesh_to_face_first_idx=mesh_to_face_first_idx,
@@ -434,16 +434,16 @@ def clip_faces(
         F
         # pyre-fixme[58]: `+` is not supported for operand types `int` and
         #  `Union[bool, float, int]`.
-        + faces_delta_cum[-1].item()
+        + faces_delta_cum[-1]
         # pyre-fixme[58]: `+` is not supported for operand types `int` and
         #  `Union[bool, float, int]`.
-        + faces_delta[-1].item()
+        + faces_delta[-1]
     )  # Total number of faces in the new Meshes
-    face_verts_clipped = torch.zeros(
-        (F_clipped, 3, 3), dtype=face_verts_unclipped.dtype, device=device
+    face_verts_clipped = ops.zeros(
+        (F_clipped, 3, 3), dtype=face_verts_unclipped.dtype
     )
-    faces_clipped_to_unclipped_idx = torch.zeros(
-        [F_clipped], dtype=torch.int64, device=device
+    faces_clipped_to_unclipped_idx = ops.zeros(
+        [F_clipped], dtype=ms.int64
     )
 
     # Update version of mesh_to_face_first_idx and num_faces_per_mesh applicable to
@@ -451,8 +451,8 @@ def clip_faces(
     mesh_to_face_first_idx_clipped = faces_unclipped_to_clipped_idx[
         mesh_to_face_first_idx
     ]
-    F_clipped_t = torch.full([1], F_clipped, dtype=torch.int64, device=device)
-    num_faces_next = torch.cat((mesh_to_face_first_idx_clipped[1:], F_clipped_t))
+    F_clipped_t = ops.full([1], F_clipped, dtype=ms.int64)
+    num_faces_next = ops.cat((mesh_to_face_first_idx_clipped[1:], F_clipped_t))
     num_faces_per_mesh_clipped = num_faces_next - mesh_to_face_first_idx_clipped
 
     ################# Start Case 1 ########################################
@@ -494,7 +494,7 @@ def clip_faces(
     faces_case3 = face_verts_unclipped[case3_unclipped_idx]
 
     # index (0, 1, or 2) of the vertex in front of the clipping plane
-    p1_face_ind = torch.where(~faces_clipped_verts[case3_unclipped_idx])[1]
+    p1_face_ind = ops.where(~faces_clipped_verts[case3_unclipped_idx])[1]
 
     # Solve for the points p4, p5 that intersect the clipping plane
     p, p_barycentric = _find_verts_intersecting_clipping_plane(
@@ -506,8 +506,8 @@ def clip_faces(
 
     # Store clipped triangle
     case3_clipped_idx = faces_unclipped_to_clipped_idx[case3_unclipped_idx]
-    t_barycentric = torch.stack((p4_barycentric, p5_barycentric, p1_barycentric), 2)
-    face_verts_clipped[case3_clipped_idx] = torch.stack((p4, p5, p1), 1)
+    t_barycentric = ops.stack((p4_barycentric, p5_barycentric, p1_barycentric), 2)
+    face_verts_clipped[case3_clipped_idx] = ops.stack((p4, p5, p1), 1)
     faces_clipped_to_unclipped_idx[case3_clipped_idx] = case3_unclipped_idx
 
     ################# End Case 3 ##########################################
@@ -537,7 +537,7 @@ def clip_faces(
     faces_case4 = face_verts_unclipped[case4_unclipped_idx]
 
     # index (0, 1, or 2) of the vertex behind the clipping plane
-    p1_face_ind = torch.where(faces_clipped_verts[case4_unclipped_idx])[1]
+    p1_face_ind = ops.where(faces_clipped_verts[case4_unclipped_idx])[1]
 
     # Solve for the points p4, p5 that intersect the clipping plane
     p, p_barycentric = _find_verts_intersecting_clipping_plane(
@@ -548,10 +548,10 @@ def clip_faces(
 
     # Store clipped triangles
     case4_clipped_idx = faces_unclipped_to_clipped_idx[case4_unclipped_idx]
-    face_verts_clipped[case4_clipped_idx] = torch.stack((p4, p2, p5), 1)
-    face_verts_clipped[case4_clipped_idx + 1] = torch.stack((p5, p2, p3), 1)
-    t1_barycentric = torch.stack((p4_barycentric, p2_barycentric, p5_barycentric), 2)
-    t2_barycentric = torch.stack((p5_barycentric, p2_barycentric, p3_barycentric), 2)
+    face_verts_clipped[case4_clipped_idx] = ops.stack((p4, p2, p5), 1)
+    face_verts_clipped[case4_clipped_idx + 1] = ops.stack((p5, p2, p3), 1)
+    t1_barycentric = ops.stack((p4_barycentric, p2_barycentric, p5_barycentric), 2)
+    t2_barycentric = ops.stack((p5_barycentric, p2_barycentric, p3_barycentric), 2)
     faces_clipped_to_unclipped_idx[case4_clipped_idx] = case4_unclipped_idx
     faces_clipped_to_unclipped_idx[case4_clipped_idx + 1] = case4_unclipped_idx
 
@@ -566,19 +566,19 @@ def clip_faces(
     # rasterizer then expresses some NDC coordinate in terms of barycentric
     # world coordinates for the clipped (small) triangle as alpha_clipped[i,:],
     #   alpha_unclipped[i, :] = barycentric_conversion[i, :, :]*alpha_clipped[i, :]
-    barycentric_conversion = torch.cat((t_barycentric, t1_barycentric, t2_barycentric))
+    barycentric_conversion = ops.cat((t_barycentric, t1_barycentric, t2_barycentric))
 
     # faces_clipped_to_conversion_idx is an (F_clipped,) shape tensor mapping each output
     # face to the applicable row of barycentric_conversion (or set to -1 if conversion is
     # not needed)
-    faces_to_convert_idx = torch.cat(
+    faces_to_convert_idx = ops.cat(
         (case3_clipped_idx, case4_clipped_idx, case4_clipped_idx + 1), 0
     )
-    barycentric_idx = torch.arange(
-        barycentric_conversion.shape[0], dtype=torch.int64, device=device
+    barycentric_idx = ops.arange(
+        barycentric_conversion.shape[0], dtype=ms.int64
     )
-    faces_clipped_to_conversion_idx = torch.full(
-        [F_clipped], -1, dtype=torch.int64, device=device
+    faces_clipped_to_conversion_idx = ops.full(
+        [F_clipped], -1, dtype=ms.int64
     )
     faces_clipped_to_conversion_idx[faces_to_convert_idx] = barycentric_idx
 
@@ -588,8 +588,8 @@ def clip_faces(
     # This will be needed because if the soft rasterizer includes both
     # triangles in the list of top K nearest triangles, we
     # should only use the one with the smaller distance.
-    clipped_faces_neighbor_idx = torch.full(
-        [F_clipped], -1, dtype=torch.int64, device=device
+    clipped_faces_neighbor_idx = ops.full(
+        [F_clipped], -1, dtype=ms.int64
     )
     clipped_faces_neighbor_idx[case4_clipped_idx] = case4_clipped_idx + 1
     clipped_faces_neighbor_idx[case4_clipped_idx + 1] = case4_clipped_idx
@@ -651,8 +651,6 @@ def convert_clipped_rasterization_to_original_faces(
     ):
         return pix_to_face_clipped, bary_coords_clipped
 
-    device = pix_to_face_clipped.device
-
     # Convert pix_to_face indices to now refer to the faces in the unclipped Meshes.
     # Init empty tensor to fill in all the background values which have pix_to_face=-1.
     empty = ops.full(pix_to_face_clipped.shape, -1, dtype=ms.int64)
@@ -676,7 +674,7 @@ def convert_clipped_rasterization_to_original_faces(
     faces_clipped_to_conversion_idx = clipped_faces.faces_clipped_to_conversion_idx
 
     if barycentric_conversion is not None:
-        bary_coords_unclipped = bary_coords_clipped.clone()
+        bary_coords_unclipped = bary_coords_clipped.copy()
 
         # Select the subset of faces that require conversion, where N is the sum
         # number of case3/case4 triangles that are in the closest k triangles to some
@@ -687,7 +685,7 @@ def convert_clipped_rasterization_to_original_faces(
             empty,
         )
         faces_to_convert_mask = pix_to_conversion_idx != -1
-        N = faces_to_convert_mask.sum().item()
+        N = faces_to_convert_mask.sum()
 
         # Expand to (N, H, W, K, 3) to be the same shape as barycentric coordinates
         faces_to_convert_mask_expanded = faces_to_convert_mask[:, :, :, :, None].expand(

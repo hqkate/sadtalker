@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <torch/extension.h>
+// #include <torch/extension.h>
 #include <algorithm>
 #include <list>
 #include <queue>
@@ -17,6 +17,7 @@
 #include "utils/geometry_utils.h"
 #include "utils/vec2.h"
 #include "utils/vec3.h"
+#include "include/ms_tensor.h"
 
 // Get (x, y, z) values for vertex from (3, 3) tensor face.
 template <typename Face>
@@ -26,11 +27,11 @@ auto ExtractVerts(const Face& face, const int vertex_index) {
 }
 
 // Compute min/max x/y for each face.
-auto ComputeFaceBoundingBoxes(const torch::Tensor& face_verts) {
+auto ComputeFaceBoundingBoxes(const mindspore::tensor::MSTensor& face_verts) {
   const int total_F = face_verts.size(0);
-  auto float_opts = face_verts.options().dtype(torch::kFloat32);
+  auto float_opts = face_verts.options().dtype(mindspore::DataType::kNumberTypeFloat32);
   auto face_verts_a = face_verts.accessor<float, 3>();
-  torch::Tensor face_bboxes = torch::full({total_F, 6}, -2.0, float_opts);
+  mindspore::tensor::MSTensor face_bboxes = torch::full({total_F, 6}, -2.0, float_opts);
 
   // Loop through all the faces
   for (int f = 0; f < total_F; ++f) {
@@ -82,11 +83,11 @@ bool CheckPointOutsideBoundingBox(
 
 // Calculate areas of all faces. Returns a tensor of shape (total_faces, 1)
 // where faces with zero area have value -1.
-auto ComputeFaceAreas(const torch::Tensor& face_verts) {
+auto ComputeFaceAreas(const mindspore::tensor::MSTensor& face_verts) {
   const int total_F = face_verts.size(0);
-  auto float_opts = face_verts.options().dtype(torch::kFloat32);
+  auto float_opts = face_verts.options().dtype(mindspore::DataType::kNumberTypeFloat32);
   auto face_verts_a = face_verts.accessor<float, 3>();
-  torch::Tensor face_areas = torch::full({total_F}, -1, float_opts);
+  mindspore::tensor::MSTensor face_areas = torch::full({total_F}, -1, float_opts);
 
   // Loop through all the faces
   for (int f = 0; f < total_F; ++f) {
@@ -123,8 +124,8 @@ namespace {
 void RasterizeMeshesNaiveCpu_worker(
     const int start_yi,
     const int end_yi,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
     const float blur_radius,
     const bool perspective_correct,
     const bool clip_barycentric_coords,
@@ -303,12 +304,12 @@ void RasterizeMeshesNaiveCpu_worker(
 }
 } // namespace
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor>
 RasterizeMeshesNaiveCpu(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int faces_per_pixel,
@@ -333,10 +334,10 @@ RasterizeMeshesNaiveCpu(
   auto float_opts = face_verts.options().dtype(torch::kFloat32);
 
   // Initialize output tensors.
-  torch::Tensor face_idxs = torch::full({N, H, W, K}, -1, long_opts);
-  torch::Tensor zbuf = torch::full({N, H, W, K}, -1, float_opts);
-  torch::Tensor pix_dists = torch::full({N, H, W, K}, -1, float_opts);
-  torch::Tensor barycentric_coords =
+  mindspore::tensor::MSTensor face_idxs = torch::full({N, H, W, K}, -1, long_opts);
+  mindspore::tensor::MSTensor zbuf = torch::full({N, H, W, K}, -1, float_opts);
+  mindspore::tensor::MSTensor pix_dists = torch::full({N, H, W, K}, -1, float_opts);
+  mindspore::tensor::MSTensor barycentric_coords =
       torch::full({N, H, W, K, 3}, -1, float_opts);
 
   auto face_verts_a = face_verts.accessor<float, 3>();
@@ -389,12 +390,12 @@ RasterizeMeshesNaiveCpu(
   return std::make_tuple(face_idxs, zbuf, barycentric_coords, pix_dists);
 }
 
-torch::Tensor RasterizeMeshesBackwardCpu(
-    const torch::Tensor& face_verts, // (F, 3, 3)
-    const torch::Tensor& pix_to_face, // (N, H, W, K)
-    const torch::Tensor& grad_zbuf, // (N, H, W, K)
-    const torch::Tensor& grad_bary, // (N, H, W, K, 3)
-    const torch::Tensor& grad_dists, // (N, H, W, K)
+mindspore::tensor::MSTensor RasterizeMeshesBackwardCpu(
+    const mindspore::tensor::MSTensor& face_verts, // (F, 3, 3)
+    const mindspore::tensor::MSTensor& pix_to_face, // (N, H, W, K)
+    const mindspore::tensor::MSTensor& grad_zbuf, // (N, H, W, K)
+    const mindspore::tensor::MSTensor& grad_bary, // (N, H, W, K, 3)
+    const mindspore::tensor::MSTensor& grad_dists, // (N, H, W, K)
     const bool perspective_correct,
     const bool clip_barycentric_coords) {
   const int F = face_verts.size(0);
@@ -403,7 +404,7 @@ torch::Tensor RasterizeMeshesBackwardCpu(
   const int W = pix_to_face.size(2);
   const int K = pix_to_face.size(3);
 
-  torch::Tensor grad_face_verts = torch::zeros({F, 3, 3}, face_verts.options());
+  mindspore::tensor::MSTensor grad_face_verts = torch::zeros({F, 3, 3}, face_verts.options());
   auto face_verts_a = face_verts.accessor<float, 3>();
   auto pix_to_face_a = pix_to_face.accessor<int64_t, 4>();
   auto grad_dists_a = grad_dists.accessor<float, 4>();
@@ -532,10 +533,10 @@ torch::Tensor RasterizeMeshesBackwardCpu(
   return grad_face_verts;
 }
 
-torch::Tensor RasterizeMeshesCoarseCpu(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
+mindspore::tensor::MSTensor RasterizeMeshesCoarseCpu(
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int bin_size,
@@ -559,8 +560,8 @@ torch::Tensor RasterizeMeshesCoarseCpu(
   const int BW = 1 + (W - 1) / bin_size;
 
   auto opts = num_faces_per_mesh.options().dtype(torch::kInt32);
-  torch::Tensor faces_per_bin = torch::zeros({N, BH, BW}, opts);
-  torch::Tensor bin_faces = torch::full({N, BH, BW, M}, -1, opts);
+  mindspore::tensor::MSTensor faces_per_bin = torch::zeros({N, BH, BW}, opts);
+  mindspore::tensor::MSTensor bin_faces = torch::full({N, BH, BW, M}, -1, opts);
   auto bin_faces_a = bin_faces.accessor<int32_t, 4>();
 
   // Precompute all face bounding boxes.

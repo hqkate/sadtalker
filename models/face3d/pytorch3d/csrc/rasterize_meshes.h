@@ -7,22 +7,22 @@
  */
 
 #pragma once
-#include <torch/extension.h>
 #include <cstdio>
 #include <tuple>
 #include "rasterize_coarse/rasterize_coarse.h"
 #include "utils/pytorch3d_cutils.h"
+#include "include/ms_tensor.h"
 
 // ****************************************************************************
 // *                            FORWARD PASS                                 *
 // ****************************************************************************
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor>
 RasterizeMeshesNaiveCpu(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int faces_per_pixel,
@@ -36,7 +36,7 @@ RasterizeMeshesNaiveCuda(
     const at::Tensor& face_verts,
     const at::Tensor& mesh_to_face_first_idx,
     const at::Tensor& num_faces_per_mesh,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int num_closest,
@@ -105,12 +105,12 @@ RasterizeMeshesNaiveCuda(
 //           in the (NDC) x/y plane between each pixel and its K closest
 //           faces along the z axis padded  with -1 for pixels hit by fewer than
 //           faces_per_pixel faces.
-inline std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+inline std::tuple<mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor>
 RasterizeMeshesNaive(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int faces_per_pixel,
@@ -156,22 +156,22 @@ RasterizeMeshesNaive(
 // *                            BACKWARD PASS                                 *
 // ****************************************************************************
 
-torch::Tensor RasterizeMeshesBackwardCpu(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& pix_to_face,
-    const torch::Tensor& grad_zbuf,
-    const torch::Tensor& grad_bary,
-    const torch::Tensor& grad_dists,
+mindspore::tensor::MSTensor RasterizeMeshesBackwardCpu(
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& pix_to_face,
+    const mindspore::tensor::MSTensor& grad_zbuf,
+    const mindspore::tensor::MSTensor& grad_bary,
+    const mindspore::tensor::MSTensor& grad_dists,
     const bool perspective_correct,
     const bool clip_barycentric_coords);
 
 #ifdef WITH_CUDA
-torch::Tensor RasterizeMeshesBackwardCuda(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& pix_to_face,
-    const torch::Tensor& grad_zbuf,
-    const torch::Tensor& grad_bary,
-    const torch::Tensor& grad_dists,
+mindspore::tensor::MSTensor RasterizeMeshesBackwardCuda(
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& pix_to_face,
+    const mindspore::tensor::MSTensor& grad_zbuf,
+    const mindspore::tensor::MSTensor& grad_bary,
+    const mindspore::tensor::MSTensor& grad_dists,
     const bool perspective_correct,
     const bool clip_barycentric_coords);
 #endif
@@ -205,12 +205,12 @@ torch::Tensor RasterizeMeshesBackwardCuda(
 // Returns:
 //    grad_face_verts: float32 Tensor of shape (F, 3, 3) giving downstream
 //                     gradients for the face vertices.
-torch::Tensor RasterizeMeshesBackward(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& pix_to_face,
-    const torch::Tensor& grad_zbuf,
-    const torch::Tensor& grad_bary,
-    const torch::Tensor& grad_dists,
+mindspore::tensor::MSTensor RasterizeMeshesBackward(
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& pix_to_face,
+    const mindspore::tensor::MSTensor& grad_zbuf,
+    const mindspore::tensor::MSTensor& grad_bary,
+    const mindspore::tensor::MSTensor& grad_dists,
     const bool perspective_correct,
     const bool clip_barycentric_coords) {
   if (face_verts.is_cuda()) {
@@ -249,8 +249,8 @@ torch::Tensor RasterizeMeshesBackward(
 
 // RasterizeMeshesCoarseCuda in rasterize_coarse/rasterize_coarse.h
 
-torch::Tensor RasterizeMeshesCoarseCpu(
-    const torch::Tensor& face_verts,
+mindspore::tensor::MSTensor RasterizeMeshesCoarseCpu(
+    const mindspore::tensor::MSTensor& face_verts,
     const at::Tensor& mesh_to_face_first_idx,
     const at::Tensor& num_faces_per_mesh,
     const std::tuple<int, int> image_size,
@@ -281,10 +281,10 @@ torch::Tensor RasterizeMeshesCoarseCpu(
 //   bin_face_idxs: Tensor of shape (N, num_bins, num_bins, K) giving the
 //                  indices of faces that fall into each bin.
 
-torch::Tensor RasterizeMeshesCoarse(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
+mindspore::tensor::MSTensor RasterizeMeshesCoarse(
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int bin_size,
@@ -322,11 +322,11 @@ torch::Tensor RasterizeMeshesCoarse(
 // ****************************************************************************
 
 #ifdef WITH_CUDA
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor>
 RasterizeMeshesFineCuda(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& bin_faces,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& bin_faces,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int bin_size,
@@ -392,11 +392,11 @@ RasterizeMeshesFineCuda(
 //           in the (NDC) x/y plane between each pixel and its K closest
 //           faces along the z axis padded  with -1 for pixels hit by fewer than
 //           faces_per_pixel faces.
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor>
 RasterizeMeshesFine(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& bin_faces,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& bin_faces,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int bin_size,
@@ -497,12 +497,12 @@ RasterizeMeshesFine(
 //           in the (NDC) x/y plane between each pixel and its K closest
 //           faces along the z axis padded  with -1 for pixels hit by fewer than
 //           faces_per_pixel faces.
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+std::tuple<mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor, mindspore::tensor::MSTensor>
 RasterizeMeshes(
-    const torch::Tensor& face_verts,
-    const torch::Tensor& mesh_to_face_first_idx,
-    const torch::Tensor& num_faces_per_mesh,
-    const torch::Tensor& clipped_faces_neighbor_idx,
+    const mindspore::tensor::MSTensor& face_verts,
+    const mindspore::tensor::MSTensor& mesh_to_face_first_idx,
+    const mindspore::tensor::MSTensor& num_faces_per_mesh,
+    const mindspore::tensor::MSTensor& clipped_faces_neighbor_idx,
     const std::tuple<int, int> image_size,
     const float blur_radius,
     const int faces_per_pixel,

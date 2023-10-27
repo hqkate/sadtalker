@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import mindspore as ms
 import numpy as np
 from mindspore import ops
@@ -90,13 +91,13 @@ def rasterize_meshes_python(  # noqa: C901
         image_size, tuple) else (image_size, image_size)
 
     K = faces_per_pixel
-    device = meshes.device
 
     verts_packed = meshes.verts_packed()
     faces_packed = meshes.faces_packed()
     faces_verts = verts_packed[faces_packed]
     mesh_to_face_first_idx = meshes.mesh_to_faces_packed_first_idx()
     num_faces_per_mesh = meshes.num_faces_per_mesh()
+    clipped_faces = None
 
     if z_clip_value is not None or cull_to_frustum:
         # Cull faces outside the view frustum, and clip faces that are partially
@@ -120,15 +121,15 @@ def rasterize_meshes_python(  # noqa: C901
 
     # Initialize output tensors.
     face_idxs = ops.full(
-        (N, H, W, K), fill_value=-1, dtype=ms.int64, device=device
+        (N, H, W, K), fill_value=-1, dtype=ms.int64
     )
     zbuf = ops.full((N, H, W, K), fill_value=-1,
-                    dtype=ms.float32, device=device)
+                    dtype=ms.float32)
     bary_coords = ops.full(
-        (N, H, W, K, 3), fill_value=-1, dtype=ms.float32, device=device
+        (N, H, W, K, 3), fill_value=-1, dtype=ms.float32
     )
     pix_dists = ops.full(
-        (N, H, W, K), fill_value=-1, dtype=ms.float32, device=device
+        (N, H, W, K), fill_value=-1, dtype=ms.float32
     )
 
     # Calculate all face bounding boxes.
@@ -144,28 +145,47 @@ def rasterize_meshes_python(  # noqa: C901
     y_mins = y_mins - np.sqrt(blur_radius) - kEpsilon
     y_maxs = y_maxs + np.sqrt(blur_radius) + kEpsilon
 
+    print("start looping through meshes in the batch ...")
+    print(N)
+
     # Loop through meshes in the batch.
-    for n in range(N):
+    for n in range(N):  # 84
+        print(n)
+
         face_start_idx = mesh_to_face_first_idx[n]
         face_stop_idx = face_start_idx + num_faces_per_mesh[n]
 
         # Iterate through the horizontal lines of the image from top to bottom.
-        for yi in range(H):
+        for yi in range(H):  # 224
             # Y coordinate of one end of the image. Reverse the ordering
             # of yi so that +Y is pointing up in the image.
             yfix = H - 1 - yi
             yf = pix_to_non_square_ndc(yfix, H, W)
 
             # Iterate through pixels on this horizontal line, left to right.
-            for xi in range(W):
+            print("Iterate through pixels on this horizontal line, left to right ... ")
+            for xi in range(W):  # 224
                 # X coordinate of one end of the image. Reverse the ordering
                 # of xi so that +X is pointing to the left in the image.
                 xfix = W - 1 - xi
                 xf = pix_to_non_square_ndc(xfix, W, H)
                 top_k_points = []
 
+                print("finished pix_to_non_square_ndc")
+
+                outside_bbox_overall = (
+                    xf < x_mins.min() or xf > x_maxs.max() or yf < y_mins.min() or yf > y_maxs.max()
+                )
+
+                if outside_bbox_overall:
+                    continue
+
                 # Check whether each face in the mesh affects this pixel.
-                for f in range(face_start_idx, face_stop_idx):
+                print(
+                    "start to check whether each face in the mesh affects this pixel ... ")
+                print(f"start loop from {face_start_idx} to {face_stop_idx}.")
+                for f in range(face_start_idx, face_stop_idx):  # loop from 0 to 70798
+
                     face = faces_verts[f].squeeze()
                     v0, v1, v2 = face.unbind(0)
 
@@ -177,14 +197,11 @@ def rasterize_meshes_python(  # noqa: C901
                         continue
 
                     # Ignore faces which have zero area.
-                    if face_area == 0.0:
+                    if math.isclose(face_area, 0.0):
                         continue
 
                     outside_bbox = (
-                        xf < x_mins[f]
-                        or xf > x_maxs[f]
-                        or yf < y_mins[f]
-                        or yf > y_maxs[f]
+                        xf < x_mins[f] or xf > x_maxs[f] or yf < y_mins[f] or yf > y_maxs[f]
                     )
 
                     # Faces with at least one vertex behind the camera won't
@@ -215,6 +232,7 @@ def rasterize_meshes_python(  # noqa: C901
                     # Check if inside before clipping
                     inside = all(x > 0.0 for x in bary)
 
+                    print("start barycentric_coordinates_clip ...")
                     # Barycentric clipping
                     if clip_barycentric_coords:
                         bary = barycentric_coordinates_clip(bary)
@@ -396,7 +414,7 @@ def point_line_distance(p, v0, v1):
     Once the projection of the point on the segment is known, the distance from
     p to the projection gives the minimum distance to the segment.
     """
-    if p.shape != v0.shape != v1.shape:
+    if p.shape != v0.shape or v0.shape != v1.shape:
         raise ValueError("All points must have the same number of coordinates")
 
     v1v0 = v1 - v0
@@ -422,7 +440,7 @@ def point_triangle_distance(p, v0, v1, v2):
     Returns:
         shortest absolute distance from the point to the triangle.
     """
-    if p.shape != v0.shape != v1.shape != v2.shape:
+    if p.shape != v0.shape or v0.shape != v1.shape or v1.shape != v2.shape:
         raise ValueError("All points must have the same number of coordinates")
 
     e01_dist = point_line_distance(p, v0, v1)

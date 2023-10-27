@@ -95,7 +95,7 @@ class FaceReconModel(nn.Cell):
     def construct(self, output_coeff):
         self.pred_vertex, self.pred_tex, self.pred_color, self.pred_lm = \
             self.facemodel.compute_for_render(output_coeff)
-        self.pred_mask, _, self.pred_face = self.renderer(
+        self.pred_mask, _, self.pred_face = self.renderer.forward_rendering(
             self.pred_vertex, self.facemodel.face_buf, feat=self.pred_color)
 
         self.pred_coeffs_dict = self.facemodel.split_coeff(output_coeff)

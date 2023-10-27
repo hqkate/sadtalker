@@ -3,7 +3,7 @@ import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
 from models.face3d.pytorch3d.utils import TensorProperties
-from models.face3d.pytorch3d.transforms import Transform3d
+from models.face3d.pytorch3d.transforms import Transform3d, Translate, Rotate
 
 
 # Default values for rotation and translation matrices.
@@ -260,7 +260,7 @@ class CamerasBase(TensorProperties):
         input points to the renderer to be in NDC space.
         """
         if self.in_ndc():
-            return Transform3d(device=self.device, dtype=ms.float32)
+            return Transform3d(dtype=ms.float32)
         else:
             # For custom cameras which can be defined in screen space,
             # users might might have to implement the screen to NDC transform based
@@ -552,9 +552,9 @@ class FoVPerspectiveCameras(CamerasBase):
         if degrees:
             fov = (np.pi / 180) * fov
 
-        if not torch.is_tensor(fov):
-            fov = torch.tensor(fov, device=self.device)
-        tanHalfFov = torch.tan((fov / 2))
+        if not ops.is_tensor(fov):
+            fov = ms.Tensor(fov)
+        tanHalfFov = ops.tan((fov / 2))
         max_y = tanHalfFov * znear
         min_y = -max_y
         max_x = max_y * aspect_ratio
@@ -636,7 +636,7 @@ class FoVPerspectiveCameras(CamerasBase):
 
         # Transpose the projection matrix as PyTorch3D transforms use row vectors.
         transform = Transform3d(
-            matrix=K.transpose(1, 2).contiguous(), device=self.device
+            matrix=K.transpose(0, 2, 1)
         )
         return transform
 
@@ -708,8 +708,47 @@ def try_get_projection_transform(
     """
 
     transform = None
-    try:
-        transform = cameras.get_projection_transform(**cameras_kwargs)
-    except NotImplementedError:
-        pass
+    transform = cameras.get_projection_transform(**cameras_kwargs)
+
     return transform
+
+
+def get_world_to_view_transform(
+    R: ms.Tensor = _R, T: ms.Tensor = _T
+) -> Transform3d:
+    """
+    This function returns a Transform3d representing the transformation
+    matrix to go from world space to view space by applying a rotation and
+    a translation.
+
+    PyTorch3D uses the same convention as Hartley & Zisserman.
+    I.e., for camera extrinsic parameters R (rotation) and T (translation),
+    we map a 3D point `X_world` in world coordinates to
+    a point `X_cam` in camera coordinates with:
+    `X_cam = X_world R + T`
+
+    Args:
+        R: (N, 3, 3) matrix representing the rotation.
+        T: (N, 3) matrix representing the translation.
+
+    Returns:
+        a Transform3d object which represents the composed RT transformation.
+
+    """
+    # TODO: also support the case where RT is specified as one matrix
+    # of shape (N, 4, 4).
+
+    if T.shape[0] != R.shape[0]:
+        msg = "Expected R, T to have the same batch dimension; got %r, %r"
+        raise ValueError(msg % (R.shape[0], T.shape[0]))
+    if T.dim() != 2 or T.shape[1:] != (3,):
+        msg = "Expected T to have shape (N, 3); got %r"
+        raise ValueError(msg % repr(T.shape))
+    if R.dim() != 3 or R.shape[1:] != (3, 3):
+        msg = "Expected R to have shape (N, 3, 3); got %r"
+        raise ValueError(msg % repr(R.shape))
+
+    # Create a Transform3d object
+    T_ = Translate(T)
+    R_ = Rotate(R)
+    return R_.compose(T_)

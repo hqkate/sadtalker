@@ -6,12 +6,14 @@
 
 from typing import List, Union
 
+import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
-
+from mindspore import jit_class
 from . import utils as struct_utils
 
 
+@jit_class
 class Meshes:
     """
     This class provides functions for working with batches of triangulated
@@ -214,11 +216,11 @@ class Meshes:
 
     def __init__(
         self,
-        verts,
-        faces,
-        textures=None,
+        verts: ms.Tensor,
+        faces: ms.Tensor,
+        textures: ms.Tensor = None,
         *,
-        verts_normals=None,
+        verts_normals: ms.Tensor = None,
     ) -> None:
         """
         Args:
@@ -267,7 +269,7 @@ class Meshes:
 
         # Boolean indicator for each mesh in the batch
         # True if mesh has non zero number of verts and face, False otherwise.
-        self.valid = None
+        self.valid = False
 
         self._N = 0  # batch size (number of meshes)
         self._V = 0  # (max) number of vertices per mesh
@@ -382,15 +384,15 @@ class Meshes:
                 # end of the tensors
                 faces_not_padded = self._faces_padded.gt(-1).all(2)
                 self._num_faces_per_mesh = faces_not_padded.sum(1)
-                if (faces_not_padded[:, :-1] < faces_not_padded[:, 1:]).any():
-                    raise ValueError("Padding of faces must be at the end")
+                # if (faces_not_padded[:, :-1] < faces_not_padded[:, 1:]).any():
+                #     raise ValueError("Padding of faces must be at the end")
 
                 # NOTE that we don't check for the ordering of padded verts
                 # as long as the faces index correspond to the right vertices.
 
-                self.valid = self._num_faces_per_mesh > 0
+                self.valid = ms.Tensor(self._num_faces_per_mesh > 0, ms.bool_)
                 self._F = int(self._num_faces_per_mesh.max())
-                if len(self._num_faces_per_mesh.unique()) == 1:
+                if len(ops.unique(self._num_faces_per_mesh)) == 1:
                     self.equisized = True
 
                 self._num_verts_per_mesh = ops.full(
@@ -506,7 +508,7 @@ class Meshes:
         Returns:
             bool indicating whether there is any data.
         """
-        return self._N == 0 or self.valid.eq(False).all()
+        return self._N == 0 or ops.equal(self.valid, False).all()
 
     def verts_list(self):
         """
@@ -520,7 +522,7 @@ class Meshes:
                 self._verts_padded is not None
             ), "verts_padded is required to compute verts_list."
             self._verts_list = struct_utils.padded_to_list(
-                self._verts_padded, self.num_verts_per_mesh().tolist()
+                self._verts_padded, self.num_verts_per_mesh().asnumpy().tolist()
             )
         return self._verts_list
 
@@ -536,7 +538,7 @@ class Meshes:
                 self._faces_padded is not None
             ), "faces_padded is required to compute faces_list."
             self._faces_list = struct_utils.padded_to_list(
-                self._faces_padded, self.num_faces_per_mesh().tolist()
+                self._faces_padded, self.num_faces_per_mesh().asnumpy().tolist()
             )
         return self._faces_list
 
@@ -869,16 +871,16 @@ class Meshes:
             return
 
         if self.isempty():
-            self._verts_normals_packed = torch.zeros(
-                (self._N, 3), dtype=torch.int64, device=self.device
+            self._verts_normals_packed = ops.zeros(
+                (self._N, 3), dtype=ms.int64
             )
         else:
             faces_packed = self.faces_packed()
             verts_packed = self.verts_packed()
-            verts_normals = torch.zeros_like(verts_packed)
+            verts_normals = ops.zeros_like(verts_packed)
             vertices_faces = verts_packed[faces_packed]
 
-            faces_normals = torch.cross(
+            faces_normals = ops.cross(
                 vertices_faces[:, 2] - vertices_faces[:, 1],
                 vertices_faces[:, 0] - vertices_faces[:, 1],
                 dim=1,
@@ -917,11 +919,11 @@ class Meshes:
         ), "faces_list and verts_list arguments are required"
 
         if self.isempty():
-            self._faces_padded = torch.zeros(
-                (self._N, 0, 3), dtype=torch.int64, device=self.device
+            self._faces_padded = ops.zeros(
+                (self._N, 0, 3), dtype=ms.int64
             )
-            self._verts_padded = torch.zeros(
-                (self._N, 0, 3), dtype=torch.float32, device=self.device
+            self._verts_padded = ops.zeros(
+                (self._N, 0, 3), dtype=ms.float32
             )
         else:
             self._faces_padded = struct_utils.list_to_padded(
@@ -963,35 +965,35 @@ class Meshes:
         verts_list = self.verts_list()
         faces_list = self.faces_list()
         if self.isempty():
-            self._verts_packed = torch.zeros(
-                (0, 3), dtype=torch.float32, device=self.device
+            self._verts_packed = ops.zeros(
+                (0, 3), dtype=ms.float32
             )
-            self._verts_packed_to_mesh_idx = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+            self._verts_packed_to_mesh_idx = ops.zeros(
+                (0,), dtype=ms.int64
             )
-            self._mesh_to_verts_packed_first_idx = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+            self._mesh_to_verts_packed_first_idx = ops.zeros(
+                (0,), dtype=ms.int64
             )
-            self._num_verts_per_mesh = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+            self._num_verts_per_mesh = ops.zeros(
+                (0,), dtype=ms.int64
             )
             self._faces_packed = -(
-                torch.ones((0, 3), dtype=torch.int64, device=self.device)
+                ops.ones((0, 3), dtype=ms.int64)
             )
-            self._faces_packed_to_mesh_idx = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+            self._faces_packed_to_mesh_idx = ops.zeros(
+                (0,), dtype=ms.int64
             )
-            self._mesh_to_faces_packed_first_idx = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+            self._mesh_to_faces_packed_first_idx = ops.zeros(
+                (0,), dtype=ms.int64
             )
-            self._num_faces_per_mesh = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+            self._num_faces_per_mesh = ops.zeros(
+                (0,), dtype=ms.int64
             )
             return
 
         verts_list_to_packed = struct_utils.list_to_packed(verts_list)
         self._verts_packed = verts_list_to_packed[0]
-        if not torch.allclose(self.num_verts_per_mesh(), verts_list_to_packed[1]):
+        if not np.allclose(self.num_verts_per_mesh().asnumpy(), verts_list_to_packed[1].asnumpy()):
             raise ValueError(
                 "The number of verts per mesh should be consistent.")
         self._mesh_to_verts_packed_first_idx = verts_list_to_packed[2]
@@ -999,7 +1001,7 @@ class Meshes:
 
         faces_list_to_packed = struct_utils.list_to_packed(faces_list)
         faces_packed = faces_list_to_packed[0]
-        if not torch.allclose(self.num_faces_per_mesh(), faces_list_to_packed[1]):
+        if not np.allclose(self.num_faces_per_mesh().asnumpy(), faces_list_to_packed[1].asnumpy()):
             raise ValueError(
                 "The number of faces per mesh should be consistent.")
         self._mesh_to_faces_packed_first_idx = faces_list_to_packed[2]
@@ -1030,30 +1032,30 @@ class Meshes:
             return
 
         if self.isempty():
-            self._edges_packed = torch.full(
-                (0, 2), fill_value=-1, dtype=torch.int64, device=self.device
+            self._edges_packed = ops.full(
+                (0, 2), fill_value=-1, dtype=ms.int64
             )
             self._edges_packed_to_mesh_idx = torch.zeros(
-                (0,), dtype=torch.int64, device=self.device
+                (0,), dtype=ms.int64
             )
             return
 
         faces = self.faces_packed()
         F = faces.shape[0]
         v0, v1, v2 = faces.chunk(3, dim=1)
-        e01 = torch.cat([v0, v1], dim=1)  # (sum(F_n), 2)
-        e12 = torch.cat([v1, v2], dim=1)  # (sum(F_n), 2)
-        e20 = torch.cat([v2, v0], dim=1)  # (sum(F_n), 2)
+        e01 = ops.cat([v0, v1], axis=1)  # (sum(F_n), 2)
+        e12 = ops.cat([v1, v2], axis=1)  # (sum(F_n), 2)
+        e20 = ops.cat([v2, v0], axis=1)  # (sum(F_n), 2)
 
         # All edges including duplicates.
-        edges = torch.cat([e12, e20, e01], dim=0)  # (sum(F_n)*3, 2)
-        edge_to_mesh = torch.cat(
+        edges = ops.cat([e12, e20, e01], axis=0)  # (sum(F_n)*3, 2)
+        edge_to_mesh = ops.cat(
             [
                 self._faces_packed_to_mesh_idx,
                 self._faces_packed_to_mesh_idx,
                 self._faces_packed_to_mesh_idx,
             ],
-            dim=0,
+            axis=0,
         )  # sum(F_n)*3
 
         # Sort the edges in increasing vertex order to remove duplicates as
@@ -1073,27 +1075,27 @@ class Meshes:
 
         V = self._verts_packed.shape[0]
         edges_hash = V * edges[:, 0] + edges[:, 1]
-        u, inverse_idxs = torch.unique(edges_hash, return_inverse=True)
+        u, inverse_idxs = ops.unique(edges_hash, return_inverse=True)
 
         # Find indices of unique elements.
         # TODO (nikhilar) remove following 4 lines when torch.unique has support
         # for returning unique indices
-        sorted_hash, sort_idx = torch.sort(edges_hash, dim=0)
-        unique_mask = torch.ones(
-            edges_hash.shape[0], dtype=torch.bool, device=self.device
+        sorted_hash, sort_idx = ops.sort(edges_hash, axis=0)
+        unique_mask = ops.ones(
+            edges_hash.shape[0], dtype=ms.bool_
         )
         unique_mask[1:] = sorted_hash[1:] != sorted_hash[:-1]
         unique_idx = sort_idx[unique_mask]
 
-        self._edges_packed = torch.stack([u // V, u % V], dim=1)
+        self._edges_packed = ops.stack([u // V, u % V], axis=1)
         self._edges_packed_to_mesh_idx = edge_to_mesh[unique_idx]
 
         self._faces_packed_to_edges_packed = inverse_idxs.reshape(3, F).t()
 
         # Compute number of edges per mesh
-        num_edges_per_mesh = torch.zeros(
-            self._N, dtype=torch.int32, device=self.device)
-        ones = torch.ones(1, dtype=torch.int32, device=self.device).expand(
+        num_edges_per_mesh = ops.zeros(
+            self._N, dtype=ms.int32)
+        ones = ops.ones(1, dtype=ms.int32).expand(
             self._edges_packed_to_mesh_idx.shape
         )
         num_edges_per_mesh = num_edges_per_mesh.scatter_add_(
@@ -1102,11 +1104,11 @@ class Meshes:
         self._num_edges_per_mesh = num_edges_per_mesh
 
         # Compute first idx for each mesh in edges_packed
-        mesh_to_edges_packed_first_idx = torch.zeros(
-            self._N, dtype=torch.int64, device=self.device
+        mesh_to_edges_packed_first_idx = ops.zeros(
+            self._N, dtype=ms.int64
         )
         num_edges_cumsum = num_edges_per_mesh.cumsum(dim=0)
-        mesh_to_edges_packed_first_idx[1:] = num_edges_cumsum[:-1].clone()
+        mesh_to_edges_packed_first_idx[1:] = num_edges_cumsum[:-1].copy()
 
         self._mesh_to_edges_packed_first_idx = mesh_to_edges_packed_first_idx
 
@@ -1148,17 +1150,17 @@ class Meshes:
         """
         verts_list = self.verts_list()
         faces_list = self.faces_list()
-        new_verts_list = [v.clone() for v in verts_list]
-        new_faces_list = [f.clone() for f in faces_list]
+        new_verts_list = [v.copy() for v in verts_list]
+        new_faces_list = [f.copy() for f in faces_list]
         other = self.__class__(verts=new_verts_list, faces=new_faces_list)
         for k in self._INTERNAL_TENSORS:
             v = getattr(self, k)
             if ops.is_tensor(v):
-                setattr(other, k, v.clone())
+                setattr(other, k, v.copy())
 
         # Textures is not a tensor but has a clone method
         if self.textures is not None:
-            other.textures = self.textures.clone()
+            other.textures = self.textures.copy()
         return other
 
     def detach(self):
@@ -1287,7 +1289,7 @@ class Meshes:
         Returns:
             new Meshes object.
         """
-        new_mesh = self.clone()
+        new_mesh = self.copy()
         return new_mesh.offset_verts_(vert_offsets_packed)
 
     def scale_verts_(self, scale):
@@ -1301,8 +1303,8 @@ class Meshes:
         Returns:
             self.
         """
-        if not torch.is_tensor(scale):
-            scale = torch.full((len(self),), scale, device=self.device)
+        if not ops.is_tensor(scale):
+            scale = ops.full((len(self),), scale)
         new_verts_list = []
         verts_list = self.verts_list()
         for i, old_verts in enumerate(verts_list):
@@ -1311,7 +1313,7 @@ class Meshes:
         self._verts_list = new_verts_list
         # update packed
         if self._verts_packed is not None:
-            self._verts_packed = torch.cat(new_verts_list, dim=0)
+            self._verts_packed = ops.cat(new_verts_list, axis=0)
         # update padded
         if self._verts_padded is not None:
             for i, verts in enumerate(self._verts_list):
@@ -1337,7 +1339,7 @@ class Meshes:
         Returns:
             new Meshes object.
         """
-        new_mesh = self.clone()
+        new_mesh = self.copy()
         return new_mesh.scale_verts_(scale)
 
     def update_padded(self, new_verts_padded):
@@ -1385,7 +1387,7 @@ class Meshes:
 
         for k in copy_tensors:
             v = getattr(self, k)
-            if torch.is_tensor(v):
+            if ops.is_tensor(v):
                 setattr(new, k, v)  # shallow copy
 
         # shallow copy of faces_list if any, st new.faces_list()
@@ -1403,7 +1405,7 @@ class Meshes:
             ]
             for k in copy_tensors:
                 v = getattr(self, k)
-                assert torch.is_tensor(v)
+                assert ops.is_tensor(v)
                 setattr(new, k, v)  # shallow copy
             # update verts_packed
             pad_to_packed = self.verts_padded_to_packed_idx()
@@ -1423,7 +1425,7 @@ class Meshes:
             ]
             for k in copy_tensors:
                 v = getattr(self, k)
-                assert torch.is_tensor(v)
+                assert ops.is_tensor(v)
                 setattr(new, k, v)  # shallow copy
 
         # update laplacian if it is compute in self
@@ -1452,9 +1454,9 @@ class Meshes:
             cur_maxes = verts.max(dim=0)[0]  # (3,)
             all_mins.append(cur_mins)
             all_maxes.append(cur_maxes)
-        all_mins = torch.stack(all_mins, dim=0)  # (N, 3)
-        all_maxes = torch.stack(all_maxes, dim=0)  # (N, 3)
-        bboxes = torch.stack([all_mins, all_maxes], dim=2)
+        all_mins = ops.stack(all_mins, axis=0)  # (N, 3)
+        all_maxes = ops.stack(all_maxes, axis=0)  # (N, 3)
+        bboxes = ops.stack([all_mins, all_maxes], axis=2)
         return bboxes
 
     def extend(self, N: int):
@@ -1473,8 +1475,8 @@ class Meshes:
             raise ValueError("N must be > 0.")
         new_verts_list, new_faces_list = [], []
         for verts, faces in zip(self.verts_list(), self.faces_list()):
-            new_verts_list.extend(verts.clone() for _ in range(N))
-            new_faces_list.extend(faces.clone() for _ in range(N))
+            new_verts_list.extend(verts.copy() for _ in range(N))
+            new_faces_list.extend(faces.copy() for _ in range(N))
 
         tex = None
         if self.textures is not None:
@@ -1586,7 +1588,7 @@ class Meshes:
                 # faces_to_keep = [[0, 6, 4],
                 #                  [0, 2, 6]]
                 # Then we want verts_to_keep to contain only vertices [0, 2, 4, 6]:
-                vertex_ids_to_keep = torch.unique(faces_to_keep, sorted=True)
+                vertex_ids_to_keep = ops.unique(faces_to_keep)
                 sub_verts.append(verts[vertex_ids_to_keep])
                 sub_verts_ids[-1].append(vertex_ids_to_keep)
 
@@ -1598,8 +1600,8 @@ class Meshes:
                 # [[0, 3, 2],
                 #  [0, 1, 3]],
                 # as each point id got reduced to its sort rank.
-                _, ids_of_unique_ids_in_sorted = torch.unique(
-                    faces_to_keep, return_inverse=True
+                _, ids_of_unique_ids_in_sorted = ops.unique(
+                    faces_to_keep
                 )
                 sub_faces.append(ids_of_unique_ids_in_sorted)
 
