@@ -128,9 +128,9 @@ class ParametricFaceModel:
             face_shape       -- torch.tensor, size (B, N, 3)
         """
 
-        v1 = face_shape[:, list(self.face_buf[:, 0])]
-        v2 = face_shape[:, list(self.face_buf[:, 1])]
-        v3 = face_shape[:, list(self.face_buf[:, 2])]
+        v1 = face_shape[:, self.face_buf[:, 0].tolist(), :]
+        v2 = face_shape[:, self.face_buf[:, 1].tolist(), :]
+        v3 = face_shape[:, self.face_buf[:, 2].tolist(), :]
         e1 = v1 - v2
         e2 = v2 - v3
 
@@ -175,9 +175,9 @@ class ParametricFaceModel:
         seq_y = [y.astype(ms.float32) for y in seq_y]
         Y = ops.cat(seq_y, axis=-1)
 
-        r = Y @ gamma[..., :1]
-        g = Y @ gamma[..., 1:2]
-        b = Y @ gamma[..., 2:]
+        r = ops.matmul(Y, gamma[..., :1])
+        g = ops.matmul(Y, gamma[..., 1:2])
+        b = ops.matmul(Y, gamma[..., 2:])
         face_color = ops.cat([r, g, b], axis=-1) * face_texture
         return face_color
 
@@ -219,7 +219,7 @@ class ParametricFaceModel:
         ], axis=1)
         rot_z = rot_z.reshape([batch_size, 3, 3])
 
-        rot = rot_z @ rot_y @ rot_x
+        rot = ops.matmul(ops.matmul(rot_z, rot_y), rot_x)
         return rot.permute(0, 2, 1)
 
     def to_camera(self, face_shape):
@@ -235,7 +235,7 @@ class ParametricFaceModel:
             face_shape       -- torch.tensor, size (B, N, 3)
         """
         # to image_plane
-        face_proj = face_shape @ self.persc_proj
+        face_proj = ops.matmul(face_shape, self.persc_proj)
         face_proj = face_proj[..., :2] / face_proj[..., 2:]
 
         return face_proj
@@ -250,7 +250,7 @@ class ParametricFaceModel:
             rot              -- torch.tensor, size (B, 3, 3)
             trans            -- torch.tensor, size (B, 3)
         """
-        return face_shape @ rot + trans.unsqueeze(1)
+        return ops.matmul(face_shape, rot) + trans.unsqueeze(1)
 
     def get_landmarks(self, face_proj):
         """
@@ -309,7 +309,7 @@ class ParametricFaceModel:
 
         face_texture = self.compute_texture(coef_dict['tex'])
         face_norm = self.compute_norm(face_shape)
-        face_norm_roted = face_norm @ rotation
+        face_norm_roted = ops.matmul(face_norm, rotation)
         face_color = self.compute_color(
             face_texture, face_norm_roted, coef_dict['gamma'])
 
@@ -345,7 +345,7 @@ class ParametricFaceModel:
 
         print("finished computing the norm.")
 
-        face_norm_roted = face_norm @ rotation
+        face_norm_roted = ops.matmul(face_norm, rotation)
         face_color = self.compute_color(
             face_texture, face_norm_roted, gammas)
 

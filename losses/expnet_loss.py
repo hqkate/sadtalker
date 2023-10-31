@@ -1,10 +1,22 @@
 import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
+import mindspore.dataset.vision as vision
+from mindspore.dataset.transforms import Compose
+
 from utils.preprocess import split_coeff
 from models.face3d.bfm import ParametricFaceModel
 from models.lipreading import get_lipreading_model
 from models.external.face3d.face_renderer import renderer
+
+
+class NormalizeUtterance():
+    """Normalize per raw audio by removing the mean and divided by the standard deviation
+    """
+    def __call__(self, signal):
+        signal_std = 0. if np.std(signal)==0. else np.std(signal)
+        signal_mean = np.mean(signal)
+        return (signal - signal_mean) / signal_std
 
 
 class LandmarksLoss(nn.LossBase):
@@ -53,25 +65,122 @@ class LipReadingLoss(nn.LossBase):
         self.lipreading_audio = get_lipreading_model("audio")
         self.renderer = renderer
 
-    def preprocess_audio(self):
+    def cut_mouth(self, images, landmarks, convert_grayscale=True):
+        """ function adapted from https://github.com/mpc001/Visual_Speech_Recognition_for_Multiple_Languages"""
+
+        mouth_sequence = []
+        # landmarks = landmarks * 112 + 112
+        if convert_grayscale:
+            converter = vision.ConvertColor(vision.ConvertMode.COLOR_RGB2GRAY) # TODO: support CPU only
+
+        for frame_idx, frame in enumerate(images):
+            window_margin = min(self._window_margin // 2, frame_idx, len(landmarks) - 1 - frame_idx)
+            smoothed_landmarks = landmarks[frame_idx-window_margin:frame_idx + window_margin + 1].mean(axis=0)
+            smoothed_landmarks += landmarks[frame_idx].mean(axis=0) - smoothed_landmarks.mean(axis=0)
+
+            center_x, center_y = ops.mean(smoothed_landmarks[self._start_idx:self._stop_idx], axis=0)
+
+            center_x = center_x.round()
+            center_y = center_y.round()
+
+            height = self._crop_height//2
+            width = self._crop_width//2
+
+            threshold = 5
+
+            if convert_grayscale:
+                # img = F_v.rgb_to_grayscale(frame).squeeze()
+                img = converter(frame.asnumpy()).squeeze()
+            else:
+                img = frame.asnumpy()
+
+            if center_y - height < 0:
+                center_y = height
+            if center_y - height < 0 - threshold:
+                raise Exception('too much bias in height')
+            if center_x - width < 0:
+                center_x = width
+            if center_x - width < 0 - threshold:
+                raise Exception('too much bias in width')
+
+            if center_y + height > img.shape[-2]:
+                center_y = img.shape[-2] - height
+            if center_y + height > img.shape[-2] + threshold:
+                raise Exception('too much bias in height')
+            if center_x + width > img.shape[-1]:
+                center_x = img.shape[-1] - width
+            if center_x + width > img.shape[-1] + threshold:
+                raise Exception('too much bias in width')
+
+            mouth = img[..., int(center_y - height): int(center_y + height), int(center_x - width): int(center_x + round(width))]
+
+            mouth_sequence.append(ms.Tensor(mouth, ms.float32))
+
+        mouth_sequence = ops.stack(mouth_sequence, axis=0)
+        return mouth_sequence
+
+    def preprocess_audio(self, audio_wav):
+
+        audio_wav = NormalizeUtterance()
         pass
 
-    def preprocess_video(self):
-        pass
+    def preprocess_images(self, pred_faces, landmarks):
+        # codes borrowed from https://github.com/filby89/spectre/blob/master/src/trainer_spectre.py
+        # ---- initialize values for cropping the face around the mouth for lipread loss ---- #
+        self._crop_width = 96
+        self._crop_height = 96
+        self._window_margin = 12
+        self._start_idx = 48
+        self._stop_idx = 68
+        crop_size = (88, 88)
+        T = 12
+        mean = 0.421
+        std = 0.165
 
-    def construct(self, audio_wav, face_vertex, face_color, triangle_coeffs, landmarks):
+        # ---- transform mouths before going into the lipread network for loss ---- #
+        self.mouth_transform = Compose([
+            vision.Normalize([0.0], [1.0]),
+            vision.CenterCrop(crop_size),
+            vision.Normalize([mean], [std]),
+            ]
+        )
+
+        """ lipread loss - first crop the mouths of the input and rendered faces
+        and then calculate the cosine distance of features
+        """
+
+        mouths_pred = self.cut_mouth(pred_faces, landmarks).unsqueeze(-1) # (84, 96, 96, 1)
+        mouths_pred = self.mouth_transform(mouths_pred.asnumpy()) # (84, 88, 88, 1)
+
+        # ---- resize back to Bx1xKxHxW (grayscale input for lipread net) ---- #
+        # (bs, color channel-grey scale, seq-length, width, height)
+        mouths_pred = ops.split(ms.Tensor(mouths_pred), T)
+        mouths_pred = ops.stack(mouths_pred).squeeze(-1).unsqueeze(1)
+
+        return mouths_pred
+
+    def construct(self, audio_wav, face_vertex, face_color, triangle_coeffs, face_proj, landmarks):
 
         # preprocess audio
         # import pdb; pdb.set_trace()
 
         # face rendering
-        pred_face = self.renderer(
-            face_vertex, face_color, triangle_coeffs)
+        pred_faces = []
+        for i in range(len(face_vertex)):
+            pred_face = self.renderer(
+                face_vertex[i, :, :].asnumpy(),
+                face_color[i, :, :].asnumpy(),
+                triangle_coeffs.asnumpy()
+            )
+            pred_face = ms.Tensor(pred_face, ms.float32)
+            pred_faces.append(pred_face.unsqueeze(0))
 
-        # process face image
+        pred_faces = ops.cat(pred_faces) # (84, 256, 256, 3)
+
+        input_tensor = self.preprocess_images(pred_faces, landmarks)
 
         c_p = self.lipreading_audio(audio_wav)
-        c_gt = self.lipreading_video(pred_face, landmarks)
+        c_gt = self.lipreading_video(input_tensor, [640] * len(input_tensor)) # logits (7, 500)
 
         loss = ops.cross_entropy(c_p, c_gt)
         return loss
@@ -96,10 +205,6 @@ class ExpNetLoss(nn.LossBase):
         coeffs = split_coeff(wav2lip_coeff)
         exp_coeff_wav2lip = coeffs[1]
 
-        # reconstruct coeffs
-        face_vertex, face_texture, face_color, landmark_w2l = self.bfm1.compute_for_render_new(
-            coeffs)  # bs*T, 68, 2
-
         new_coeffs = (
             coeffs[0],
             exp_coeff_pred.view(-1, 64),
@@ -109,19 +214,30 @@ class ExpNetLoss(nn.LossBase):
             coeffs[5]
         )
 
-        face_vertex, face_texture, face_color, landmarks_rep = self.bfm2.compute_for_render_new(
-            new_coeffs)
-
         # distill loss (lip-only coefficients, MSE)
         loss_distill = self.distill_loss(
             exp_coeff_pred.view(-1, 64), exp_coeff_wav2lip)
 
         # landmarks loss (eyes)
-        loss_lks = self.lks_loss(landmark_w2l, landmarks_rep, ratio_gt)
+        render_results_1 = self.bfm1.compute_for_render_new(coeffs)  # bs*T, 68, 2
+        landmarks_w2l = render_results_1[-1]
+
+        render_results_2 = self.bfm2.compute_for_render_new(new_coeffs)
+        landmarks_rep = render_results_2[-1]
+
+        face_vertex = render_results_2[0]
+        face_texture = render_results_2[1]
+        face_color = render_results_2[2]
+        face_proj = render_results_2[3]
+
+        # landmarks_w2l = ms.Tensor(np.load("landmarks_w2l.npy"), ms.float32)
+        # landmarks_rep = ms.Tensor(np.load("landmarks_rep.npy"), ms.float32)
+        loss_lks = self.lks_loss(landmarks_w2l, landmarks_rep, ratio_gt)
 
         # lip-reading loss (cross-entropy)
-        # loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, landmarks_rep)
-        loss_read = 0.0
+        audio_wav = None
+        loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, face_proj, landmarks_rep)
+        # loss_read = 0.0
 
         loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
 

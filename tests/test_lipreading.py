@@ -236,7 +236,7 @@ def main():
     # input_np = np.random.rand(B, 1, 29, 88, 88)
     # np.save("input_np.npy", input_np)
     input_np = np.load("input_np.npy")
-    input_tensor = ms.Tensor(input_np, ms.float32)
+    input_tensor = ms.Tensor(input_np, ms.float32) # (bs, color channel-grey scale, seq-elngth, width, height)
     logits = model(input_tensor, [640] * B)
 
     # _, preds = ops.max(ops.softmax(logits, axis=1), axis=1)
