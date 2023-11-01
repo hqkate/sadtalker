@@ -55,6 +55,7 @@ class Audio2Exp(nn.Cell):
         curr_ref = batch['ref']
         ratio = batch['ratio_gt']
         first_frame_img = batch['first_frame_img']
+        audio_wav = batch['audio_wav']
 
         # bs*T 1 80 16
         audiox = current_mel_input.view(-1, 1, 80, 16)
@@ -66,7 +67,7 @@ class Audio2Exp(nn.Cell):
             audiox, first_frame_img)  # bs*T, 3, 96, 96
         full_coeff = self.coeff_enc(img_with_lip)
 
-        return (curr_exp_coeff_pred, full_coeff, ratio)
+        return (curr_exp_coeff_pred, full_coeff, ratio, audio_wav)
 
     def construct_old(self, batch):
 

@@ -135,6 +135,7 @@ def get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=False,
 
     img = ms.Tensor((img), ms.float32)
     img_masked = ms.Tensor((img_masked), ms.float32)
+    audio_wavs = ms.Tensor(wav, ms.float32)
 
     # split frames
     T = 12
@@ -145,8 +146,10 @@ def get_data(first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=False,
     ratio = ops.cat(ops.tensor_split(
         ratio, num_frames // T, axis=1), axis=0)
     first_frame_img = first_frame_img.repeat(num_frames, axis=0)
+    audio_wavs = ops.stack(audio_wavs.split(640 * 12)).unsqueeze(1) # (7, 1, 7680)
 
     return {'indiv_mels': indiv_mels,
+            'audio_wav': audio_wavs,
             'ref': ref_coeff,
             'num_frames': num_frames,
             'ratio_gt': ratio,

@@ -232,10 +232,13 @@ def main():
     ms.load_param_into_net(model, param_dict)
     model.set_train(False)
 
-    B = 1
+    import pdb; pdb.set_trace()
+
+    B = 84
     # input_np = np.random.rand(B, 1, 29, 88, 88)
+    input_np = np.random.rand(B, 1, 640)
     # np.save("input_np.npy", input_np)
-    input_np = np.load("input_np.npy")
+    # input_np = np.load("input_np.npy")
     input_tensor = ms.Tensor(input_np, ms.float32) # (bs, color channel-grey scale, seq-elngth, width, height)
     logits = model(input_tensor, [640] * B)
 

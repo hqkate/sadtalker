@@ -14,8 +14,8 @@ class NormalizeUtterance():
     """Normalize per raw audio by removing the mean and divided by the standard deviation
     """
     def __call__(self, signal):
-        signal_std = 0. if np.std(signal)==0. else np.std(signal)
-        signal_mean = np.mean(signal)
+        signal_std = signal.std()
+        signal_mean = signal.mean()
         return (signal - signal_mean) / signal_std
 
 
@@ -64,14 +64,32 @@ class LipReadingLoss(nn.LossBase):
         self.lipreading_video = get_lipreading_model("video")
         self.lipreading_audio = get_lipreading_model("audio")
         self.renderer = renderer
+        self.celoss = nn.CrossEntropyLoss()
+
+        self._crop_width = 96
+        self._crop_height = 96
+        self._window_margin = 12
+        self._start_idx = 48
+        self._stop_idx = 68
+
+        crop_size = (88, 88)
+        mean = 0.421
+        std = 0.165
+
+        # ---- transform mouths before going into the lipread network for loss ---- #
+        self.mouth_transform = Compose([
+            vision.Normalize([0.0], [1.0]),
+            vision.CenterCrop(crop_size),
+            vision.Normalize([mean], [std]),
+            ]
+        )
 
     def cut_mouth(self, images, landmarks, convert_grayscale=True):
         """ function adapted from https://github.com/mpc001/Visual_Speech_Recognition_for_Multiple_Languages"""
 
         mouth_sequence = []
         # landmarks = landmarks * 112 + 112
-        if convert_grayscale:
-            converter = vision.ConvertColor(vision.ConvertMode.COLOR_RGB2GRAY) # TODO: support CPU only
+        converter = vision.ConvertColor(vision.ConvertMode.COLOR_RGB2GRAY) # TODO: support CPU only
 
         for frame_idx, frame in enumerate(images):
             window_margin = min(self._window_margin // 2, frame_idx, len(landmarks) - 1 - frame_idx)
@@ -120,30 +138,14 @@ class LipReadingLoss(nn.LossBase):
         return mouth_sequence
 
     def preprocess_audio(self, audio_wav):
-
-        audio_wav = NormalizeUtterance()
-        pass
+        audio_wav = NormalizeUtterance()(audio_wav)
+        return audio_wav
 
     def preprocess_images(self, pred_faces, landmarks):
         # codes borrowed from https://github.com/filby89/spectre/blob/master/src/trainer_spectre.py
         # ---- initialize values for cropping the face around the mouth for lipread loss ---- #
-        self._crop_width = 96
-        self._crop_height = 96
-        self._window_margin = 12
-        self._start_idx = 48
-        self._stop_idx = 68
-        crop_size = (88, 88)
-        T = 12
-        mean = 0.421
-        std = 0.165
 
-        # ---- transform mouths before going into the lipread network for loss ---- #
-        self.mouth_transform = Compose([
-            vision.Normalize([0.0], [1.0]),
-            vision.CenterCrop(crop_size),
-            vision.Normalize([mean], [std]),
-            ]
-        )
+        T = 12
 
         """ lipread loss - first crop the mouths of the input and rendered faces
         and then calculate the cosine distance of features
@@ -161,9 +163,6 @@ class LipReadingLoss(nn.LossBase):
 
     def construct(self, audio_wav, face_vertex, face_color, triangle_coeffs, face_proj, landmarks):
 
-        # preprocess audio
-        # import pdb; pdb.set_trace()
-
         # face rendering
         pred_faces = []
         for i in range(len(face_vertex)):
@@ -178,11 +177,12 @@ class LipReadingLoss(nn.LossBase):
         pred_faces = ops.cat(pred_faces) # (84, 256, 256, 3)
 
         input_tensor = self.preprocess_images(pred_faces, landmarks)
+        input_audio = self.preprocess_audio(audio_wav)
 
-        c_p = self.lipreading_audio(audio_wav)
+        c_p = self.lipreading_audio(input_audio, [640] * len(input_audio)) # (B, 500)
         c_gt = self.lipreading_video(input_tensor, [640] * len(input_tensor)) # logits (7, 500)
 
-        loss = ops.cross_entropy(c_p, c_gt)
+        loss = self.celoss(ops.log_softmax(c_p), ops.log_softmax(c_gt))
         return loss
 
 
@@ -198,7 +198,7 @@ class ExpNetLoss(nn.LossBase):
 
         self.cast = ops.Cast()
 
-    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt
+    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt, audio_wav
                   ):
 
         # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
@@ -235,9 +235,7 @@ class ExpNetLoss(nn.LossBase):
         loss_lks = self.lks_loss(landmarks_w2l, landmarks_rep, ratio_gt)
 
         # lip-reading loss (cross-entropy)
-        audio_wav = None
         loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, face_proj, landmarks_rep)
-        # loss_read = 0.0
 
         loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
 
