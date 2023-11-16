@@ -20,15 +20,15 @@ class Audio2Pose(nn.Cell):
         self.netG = CVAE(cfg)
         self.netD_motion = PoseSequenceDiscriminator(cfg)
 
-    def construct(self, x):
+    def construct(self, x_gt, x_class, x_indiv_mels):
 
         batch = {}
-        coeff_gt = x['gt'].squeeze(0)  # bs frame_len+1 73
+        coeff_gt = x_gt.squeeze(0)  # bs frame_len+1 73
         batch['pose_motion_gt'] = coeff_gt[:, 1:, 64:70] - \
             coeff_gt[:, :1, 64:70]  # bs frame_len 6
         batch['ref'] = coeff_gt[:, 0, 64:70]  # bs  6
-        batch['class'] = x['class'].squeeze(0)  # bs
-        indiv_mels = x['indiv_mels'].squeeze(0)  # bs seq_len+1 80 16
+        batch['class'] = x_class.squeeze(0)  # bs
+        indiv_mels = x_indiv_mels.squeeze(0)  # bs seq_len+1 80 16
 
         # forward
         audio_emb = self.audio_encoder(
@@ -37,9 +37,10 @@ class Audio2Pose(nn.Cell):
         batch = self.netG(batch)
 
         pose_motion_pred = batch['pose_motion_pred']           # bs frame_len 6
-        pose_gt = coeff_gt[:, 1:, 64:70].clone()               # bs frame_len 6
+        pose_gt = coeff_gt[:, 1:, 64:70].copy()               # bs frame_len 6
         pose_pred = coeff_gt[:, :1, 64:70] + pose_motion_pred  # bs frame_len 6
 
+        # forward discriminator
         batch['pose_pred'] = pose_pred
         batch['pose_gt'] = pose_gt
 

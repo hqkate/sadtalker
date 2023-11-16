@@ -79,7 +79,8 @@ class ParametricFaceModel:
         self.camera_distance = camera_distance
         self.sh_a = sh_a
         self.sh_c = sh_c
-        self.init_lit = ms.Tensor(init_lit.reshape([1, 1, -1]).astype(np.float32))
+        self.init_lit = ms.Tensor(
+            init_lit.reshape([1, 1, -1]).astype(np.float32))
 
     def compute_shape(self, id_coeff, exp_coeff):
         """
@@ -114,7 +115,7 @@ class ParametricFaceModel:
         batch_size = tex_coeff.shape[0]
 
         face_texture = ms.Tensor(np.einsum(
-            'ij,aj->ai', self.tex_base, tex_coeff.asnumpy())) + ms.Tensor(self.mean_tex)
+            'ij,aj->ai', self.tex_base, tex_coeff.asnumpy(), ms.float32)) + ms.Tensor(self.mean_tex, ms.float32)
         if normalize:
             face_texture = face_texture / 255.
         return face_texture.reshape([batch_size, -1, 3])
@@ -165,11 +166,16 @@ class ParametricFaceModel:
         y2 = -self.sh_a[1] * self.sh_c[1] * face_norm[..., 1:2]
         y3 = self.sh_a[1] * self.sh_c[1] * face_norm[..., 2:]
         y4 = -self.sh_a[1] * self.sh_c[1] * face_norm[..., :1]
-        y5 = self.sh_a[2] * self.sh_c[2] * face_norm[..., :1] * face_norm[..., 1:2]
-        y6 = -self.sh_a[2] * self.sh_c[2] * face_norm[..., 1:2] * face_norm[..., 2:]
-        y7 = ms.Tensor(0.5) * self.sh_a[2] * self.sh_c[2] / ms.Tensor(np.sqrt(3.)) * (ms.Tensor(3.0) * face_norm[..., 2:] ** 2 - ms.Tensor(1.0))
-        y8 = -self.sh_a[2] * self.sh_c[2] * face_norm[..., :1] * face_norm[..., 2:]
-        y9 = ms.Tensor(0.5) * self.sh_a[2] * self.sh_c[2] * (face_norm[..., :1] ** 2 - face_norm[..., 1:2] ** 2)
+        y5 = self.sh_a[2] * self.sh_c[2] * \
+            face_norm[..., :1] * face_norm[..., 1:2]
+        y6 = -self.sh_a[2] * self.sh_c[2] * \
+            face_norm[..., 1:2] * face_norm[..., 2:]
+        y7 = ms.Tensor(0.5) * self.sh_a[2] * self.sh_c[2] / ms.Tensor(
+            np.sqrt(3.)) * (ms.Tensor(3.0) * face_norm[..., 2:] ** 2 - ms.Tensor(1.0))
+        y8 = -self.sh_a[2] * self.sh_c[2] * \
+            face_norm[..., :1] * face_norm[..., 2:]
+        y9 = ms.Tensor(0.5) * self.sh_a[2] * self.sh_c[2] * \
+            (face_norm[..., :1] ** 2 - face_norm[..., 1:2] ** 2)
 
         seq_y = [y1, y2, y3, y4, y5, y6, y7, y8, y9]
         seq_y = [y.astype(ms.float32) for y in seq_y]
@@ -236,7 +242,7 @@ class ParametricFaceModel:
         """
         # to image_plane
         face_proj = ops.matmul(face_shape, self.persc_proj)
-        face_proj = face_proj[..., :2] / face_proj[..., 2:]
+        face_proj = ops.div(face_proj[..., :2], face_proj[..., 2:])
 
         return face_proj
 
