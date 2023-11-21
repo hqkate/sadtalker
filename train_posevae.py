@@ -26,7 +26,7 @@ from mindspore import nn, context, CheckpointConfig
 from mindspore.amp import auto_mixed_precision
 
 from datasets.generate_batch import get_data
-from datasets.dataset_wrapper import DatasetWrapper
+from datasets.dataset_pvae import TrainDataset
 from utils.preprocess import CropAndExtract
 from models.audio2pose.audio2pose import Audio2Pose
 from argparse import ArgumentParser
@@ -35,87 +35,38 @@ from trainer import GWithLossCell, DWithLossCell, GTrainOneStepCell, DTrainOneSt
 from train_expnet import init_path
 
 
-def posevae_trainer(net, optimizer, cfg):
+def posevae_trainer(net, optimizer_G, optimizer_D, cfg):
     is_train_finetune = False
 
     generator, discriminator = (
-        net.netG,
+        net,
         net.netD_motion,
     )
     generator_w_loss = GWithLossCell(generator, discriminator, cfg)
     discriminator_w_loss = DWithLossCell(discriminator)
-    generator_t_step = GTrainOneStepCell(generator_w_loss, optimizer)
-    discriminator_t_step = DTrainOneStepCell(discriminator_w_loss, optimizer)
-    # generator_t_step = GTrainOneStepCell(generator_w_loss, optimizer.get("generator"))
-    # discriminator_t_step = DTrainOneStepCell(discriminator_w_loss, optimizer.get("discriminator"))
+    generator_t_step = GTrainOneStepCell(generator_w_loss, optimizer_G)
+    discriminator_t_step = DTrainOneStepCell(discriminator_w_loss, optimizer_D)
+
     trainer = VAEGTrainer(generator_t_step, discriminator_t_step, cfg, is_train_finetune)
     return trainer
 
 
-def train(cfg):
-    context.set_context(mode=context.PYNATIVE_MODE,
-                        device_target="Ascend", device_id=1)
-    # context.set_context(mode=context.GRAPH_MODE,
-    #                     device_target="CPU", device_id=7)
-
-    pic_path = args.source_image
-    audio_path = args.driven_audio
-    save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))
-    os.makedirs(save_dir, exist_ok=True)
-    pose_style = args.pose_style
-    ref_eyeblink = args.ref_eyeblink
-    ref_pose = args.ref_pose
+def train(args):
+    # context.set_context(mode=context.PYNATIVE_MODE,
+    #                     device_target="Ascend", device_id=6)
+    context.set_context(mode=context.GRAPH_MODE,
+                        device_target="Ascend", device_id=6)
 
     current_root_path = os.path.split(sys.argv[0])[0]
-
     sadtalker_paths = init_path(args.checkpoint_dir, os.path.join(
         current_root_path, 'config'), args.preprocess)
 
-    # init preprocess model
-    preprocess_model = CropAndExtract(sadtalker_paths)
-
-    # crop image and extract 3dmm from image
-    first_frame_dir = os.path.join(save_dir, 'first_frame_dir')
-    os.makedirs(first_frame_dir, exist_ok=True)
-    print('3DMM Extraction for source image')
-    first_coeff_path, _, _ = preprocess_model.generate(pic_path, first_frame_dir, args.preprocess,
-                                                       source_image_flag=True, pic_size=args.size)
-
-    if first_coeff_path is None:
-        print("Can't get the coeffs of the input")
-        return
-
-    if ref_eyeblink is not None:
-        ref_eyeblink_videoname = os.path.splitext(
-            os.path.split(ref_eyeblink)[-1])[0]
-        ref_eyeblink_frame_dir = os.path.join(save_dir, ref_eyeblink_videoname)
-        os.makedirs(ref_eyeblink_frame_dir, exist_ok=True)
-        print('3DMM Extraction for the reference video providing eye blinking')
-        ref_eyeblink_coeff_path, _, _ = preprocess_model.generate(
-            ref_eyeblink, ref_eyeblink_frame_dir, args.preprocess, source_image_flag=False)
-    else:
-        ref_eyeblink_coeff_path = None
-
-    if ref_pose is not None:
-        if ref_pose == ref_eyeblink:
-            ref_pose_coeff_path = ref_eyeblink_coeff_path
-        else:
-            ref_pose_videoname = os.path.splitext(
-                os.path.split(ref_pose)[-1])[0]
-            ref_pose_frame_dir = os.path.join(save_dir, ref_pose_videoname)
-            os.makedirs(ref_pose_frame_dir, exist_ok=True)
-            print('3DMM Extraction for the reference video providing pose')
-            ref_pose_coeff_path, _, _ = preprocess_model.generate(
-                ref_pose, ref_pose_frame_dir, args.preprocess, source_image_flag=False)
-    else:
-        ref_pose_coeff_path = None
-
     # create train data loader
     batch_size = 1
-    batch = get_data(first_coeff_path, audio_path,
-                     ref_eyeblink_coeff_path, still=args.still)
-    dataset = DatasetWrapper(batch)
-    dataset_column_names = dataset.get_output_columns()
+    train_data_path = "./data_train/images.txt"
+    dataset = TrainDataset(train_data_path)
+
+    dataset_column_names = ['data']
     ds = ms.dataset.GeneratorDataset(
         dataset,
         column_names=dataset_column_names,
@@ -133,7 +84,7 @@ def train(cfg):
 
     net_audio2pose = Audio2Pose(cfg_pvae)
     net_audio2pose.set_train(True)
-    auto_mixed_precision(net_audio2pose, "O0")
+    auto_mixed_precision(net_audio2pose, "O3")
 
     # cfg_pvae.steps_per_epoch = loader_train.get_dataset_size()
 
@@ -153,18 +104,20 @@ def train(cfg):
     max_lr = 0.0005
     num_epochs = 2
     decay_epoch = 2
-    total_step = len(batch) * num_epochs
-    step_per_epoch = len(batch)
+    total_step = loader_train.get_dataset_size() * num_epochs
+    step_per_epoch = loader_train.get_dataset_size()
     lr_scheduler = nn.cosine_decay_lr(
         min_lr, max_lr, total_step, step_per_epoch, decay_epoch)
 
-    optimizer_params = [p for p in net_audio2pose.get_parameters()]
-    optimizer_params = [{"params": optimizer_params, "lr": lr_scheduler}]
-
     # build optimizer
-    optimizer = nn.AdamWeightDecay(
-        optimizer_params, learning_rate=max_lr)
+    D_params = list(net_audio2pose.netD_motion.trainable_params())
+    D_optimizer_params = [{"params": D_params, "lr": lr_scheduler}]
 
+    G_params = list(net_audio2pose.netG.trainable_params())
+    G_optimizer_params = [{"params": G_params, "lr": lr_scheduler}]
+
+    optimizer_G = nn.Adam(G_optimizer_params, learning_rate=max_lr)
+    optimizer_D = nn.Adam(D_optimizer_params, learning_rate=max_lr)
 
     # define callbacks
     # save_checkpoint_steps = cfg.train_params.save_epoch_frq * loader_train.get_dataset_size()
@@ -200,12 +153,11 @@ def train(cfg):
     )
 
     # define trainer
-    trainer = posevae_trainer(net_audio2pose, optimizer, cfg_pvae)
+    trainer = posevae_trainer(net_audio2pose, optimizer_G, optimizer_D, cfg_pvae)
     initial_epoch = 0
-    epoch_size = 5
     print(" training...")
     trainer.train(
-        epoch_size * loader_train.get_dataset_size(),
+        num_epochs * loader_train.get_dataset_size(),
         loader_train,
         callbacks=[eval_cb],
         dataset_sink_mode=False,

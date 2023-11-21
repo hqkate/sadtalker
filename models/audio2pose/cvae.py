@@ -26,7 +26,7 @@ class CVAE(nn.Cell):
     def reparameterize(self, mu, logvar):
         std = ops.Exp()(0.5 * logvar)
         eps = ops.randn_like(std)
-        return mu + eps * std
+        return ops.add(mu, ops.mul(eps, std))
 
     def construct(self, batch):
         batch = self.encoder(batch)
@@ -64,10 +64,10 @@ class Encoder(nn.Cell):
         self.linear_logvar = nn.Dense(layer_sizes[-1], latent_size)
         self.linear_audio = nn.Dense(audio_emb_in_size, audio_emb_out_size)
 
-        self.classbias = ms.Parameter(
-            np.random.randn(self.num_classes, latent_size))
+        self.classbias = ms.Tensor(np.random.randn(self.num_classes, latent_size).astype(np.float16))
 
     def construct(self, batch):
+
         class_id = batch['class']
         pose_motion_gt = batch['pose_motion_gt']  # bs seq_len 6
         ref = batch['ref']  # bs 6
@@ -117,8 +117,8 @@ class Decoder(nn.Cell):
         self.pose_linear = nn.Dense(6, 6)
         self.linear_audio = nn.Dense(audio_emb_in_size, audio_emb_out_size)
 
-        self.classbias = ms.Parameter(
-            np.random.randn(self.num_classes, latent_size))
+        self.classbias = ms.Tensor(
+            np.random.randn(self.num_classes, latent_size).astype(np.float16))
 
     def construct(self, batch):
 

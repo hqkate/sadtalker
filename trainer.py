@@ -62,9 +62,10 @@ class GTrainOneStepCell(TrainOneStepCell):
         self.network.discriminator.set_train(False)
         return self
 
-    def construct(self, *inputs):
+    def construct(self, x_gt, x_class, x_indiv_mels):
         network_fwd_bwd = ops.value_and_grad(self.network, grad_position=None, weights=self.weights, has_aux=True)
-        (loss, pred), grads = network_fwd_bwd(*inputs)
+        (loss, pred), grads = network_fwd_bwd((x_gt, x_class, x_indiv_mels))
+
         if self.reducer_flag:
             grads = self.grad_reducer(grads)
         opt_res = self.optimizer(grads)
@@ -93,11 +94,13 @@ class VAEGTrainer:
         self.finetune = finetune
         self.cfg = cfg
 
-    def run(self, *inputs):
-        x_gt, x_class, x_indiv_mels = inputs
+    def run(self, x_gt, x_class, x_indiv_mels):
 
+        print("running train_one_step_g ...")
         self.train_one_step_g.set_train(not self.finetune)
-        loss_g, output = self.train_one_step_g(*inputs)
+        loss_g, output = self.train_one_step_g(x_gt, x_class, x_indiv_mels)
+
+        print("running train_one_step_d ...")
         self.train_one_step_d.set_train()
         loss_d = self.train_one_step_d(x_gt, output)
         return loss_g, loss_d
@@ -110,20 +113,26 @@ class VAEGTrainer:
         #     self.finetune,
         # )
         print(f"Start training for {total_steps} iterations")
+
         dataset_size = dataset.get_dataset_size()
         repeats_num = (total_steps + dataset_size - 1) // dataset_size
         dataset = dataset.repeat(repeats_num)
         dataloader = dataset.create_dict_iterator()
         for num_batch, sample in enumerate(dataloader):
+
             if num_batch >= total_steps:
                 print("Reached the target number of iterations")
                 break
 
-            x_gt = sample['gt']
-            x_class = sample['class']
-            x_indiv_mels = sample['indiv_mels']
+            x_gt = sample['data']['gt']
+            x_class = sample['data']['class']
+            x_indiv_mels = sample['data']['indiv_mels']
 
             loss_g, loss_d = self.run(x_gt, x_class, x_indiv_mels)
+
+            print(loss_g)
+            print(loss_d)
+
             # if save_ckpt_logs:
             #     callbacks([loss_g.asnumpy().mean(), loss_d.asnumpy().mean()])
 
@@ -143,11 +152,10 @@ class GWithLossCell(nn.Cell):
         self.real_target = Tensor(1.0, mstype.float32)
 
         self.mse = nn.MSELoss()
-        self.kl = nn.KLDivLoss()
 
     def construct(self, data_batch):
 
-        data_batch = self.generator(data_batch)
+        data_batch = self.generator(*data_batch)
 
         logits = data_batch['pose_motion_pred']
         labels = data_batch['pose_motion_gt']
@@ -157,11 +165,13 @@ class GWithLossCell(nn.Cell):
         std = ops.Exp()(0.5 * logvar)
 
         loss_mse = self.mse(logits, labels)
-        loss_kl = ops.sum(mu ** 2 + std ** 2 - ops.log(std) - 0.5)
+        loss_kl = ops.sum(ops.square(mu) + ops.square(std) - ops.log(std) - 0.5)
 
-        output_pred = self.discriminator(logits, is_real=False)
+        output_pred = self.discriminator(logits)
 
         real_target = self.real_target.expand_as(output_pred)
+
+        output_pred = output_pred.astype(mstype.float32)
         loss_adversarial = self.criterion(output_pred, real_target)
 
 
@@ -182,8 +192,9 @@ class DWithLossCell(nn.Cell):
         self.fake_target = Tensor(0.0, mstype.float32)
 
     def construct(self, ground_truth, generated_samples):
-        real_pred = self.discriminator(ground_truth, is_real=True)
-        fake_pred = self.discriminator(generated_samples, is_real=False)
+        ground_truth = ground_truth[1:, 64:].unsqueeze(0)
+        real_pred = self.discriminator(ground_truth).astype(mstype.float32)
+        fake_pred = self.discriminator(generated_samples).astype(mstype.float32)
 
         real_target = self.real_target.expand_as(real_pred)
         fake_target = self.fake_target.expand_as(fake_pred)
