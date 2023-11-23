@@ -20,36 +20,27 @@ def load_cpk(checkpoint_path, model):
 
 class Audio2Coeff():
 
-    def __init__(self, sadtalker_path):
+    def __init__(self, config):
         # load config
-        fcfg_pose = open(sadtalker_path['audio2pose_yaml_path'])
-        cfg_pose = CN.load_cfg(fcfg_pose)
-        cfg_pose.freeze()
-        fcfg_exp = open(sadtalker_path['audio2exp_yaml_path'])
-        cfg_exp = CN.load_cfg(fcfg_exp)
-        cfg_exp.freeze()
+        cfg_exp = config.audio2exp
+        cfg_pose = config.audio2pose
+
+        # load audio2exp_model
+        checkpoint_dir = cfg_exp.path.checkpoint_dir
+        netG = ExpNet()
+        self.audio2exp_model = Audio2Exp(
+            netG, cfg_exp, prepare_training_loss=False)
+        path_audio2exp_checkpoint = os.path.join(checkpoint_dir, cfg_exp.path.audio2exp_checkpoint)
+        load_cpk(path_audio2exp_checkpoint, model=self.audio2exp_model)
 
         # load audio2pose_model
+        checkpoint_dir = cfg_pose.path.checkpoint_dir
         self.audio2pose_model = Audio2Pose(cfg_pose)
-
-        load_cpk(sadtalker_path['audio2pose_checkpoint'],
-                 model=self.audio2pose_model)
+        path_audio2pose_checkpoint = os.path.join(checkpoint_dir, cfg_pose.path.audio2pose_checkpoint)
+        load_cpk(path_audio2pose_checkpoint, model=self.audio2pose_model)
 
         for param in self.audio2pose_model.get_parameters():
             param.requires_grad = False
-
-        # load audio2exp_model
-        netG = ExpNet()
-
-        for param in netG.get_parameters():
-            netG.requires_grad = False
-        netG.set_train(False)
-
-        self.audio2exp_model = Audio2Exp(
-            netG, cfg_exp, prepare_training_loss=False)
-
-        load_cpk(
-            sadtalker_path['audio2exp_checkpoint'], model=self.audio2exp_model)
 
         for param in self.audio2exp_model.get_parameters():
             param.requires_grad = False
@@ -63,9 +54,6 @@ class Audio2Coeff():
         results_dict_exp = self.audio2exp_model.test(batch)
         exp_pred = results_dict_exp['exp_coeff_pred']  # bs T 64
 
-        # for class_id in  range(1):
-        # class_id = 0#(i+10)%45
-        # class_id = random.randint(0,46)                                   #46 styles can be selected
         batch['class'] = ms.Tensor([pose_style], dtype=ms.int32)
         results_dict_pose = self.audio2pose_model.test(batch)
         pose_pred = results_dict_pose['pose_pred']  # bs T 6

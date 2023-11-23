@@ -1,6 +1,11 @@
+Path:
+  checkpoint_dir: "./checkpoints/"
+  audio2pose_checkpoint: 'ms/ms_audio2pose.ckpt'
+
+
 DATASET:
-  TRAIN_FILE_LIST: /apdcephfs_cq2/share_1290939/wenxuazhang/code/audio2pose_unet_noAudio/dataset/train_33.txt
-  EVAL_FILE_LIST: /apdcephfs_cq2/share_1290939/wenxuazhang/code/audio2pose_unet_noAudio/dataset/val.txt
+  TRAIN_FILE_LIST: ./datasets/code/audio2pose_unet_noAudio/dataset/train_33.txt
+  EVAL_FILE_LIST: ./datasets/code/audio2pose_unet_noAudio/dataset/val.txt
   TRAIN_BATCH_SIZE: 64
   EVAL_BATCH_SIZE: 1
   EXP: True
@@ -8,10 +13,10 @@ DATASET:
   FRAME_LEN: 32
   COEFF_LEN: 73
   NUM_CLASSES: 46
-  AUDIO_ROOT_PATH: /apdcephfs_cq2/share_1290939/wenxuazhang/voxceleb1/wav
-  COEFF_ROOT_PATH: /apdcephfs_cq2/share_1290939/shadowcun/datasets/VoxCeleb/v1/imdb
+  AUDIO_ROOT_PATH: ./datasets/voxceleb1/wav
+  COEFF_ROOT_PATH: ./datasets/VoxCeleb/v1/imdb
   DEBUG: True
-  
+
 
 MODEL:
   AUDIOENCODER:
@@ -27,7 +32,7 @@ MODEL:
     LATENT_SIZE: 64
     ENCODER_LAYER_SIZES: [192, 128]
     DECODER_LAYER_SIZES: [128, 192]
-    
+
 
 TRAIN:
   MAX_EPOCH: 150
@@ -45,5 +50,3 @@ TRAIN:
 
 TAG:
   NAME: cvae_UNET_useAudio_usewav2lipAudioEncoder
-
-

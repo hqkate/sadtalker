@@ -43,18 +43,21 @@ def split_coeff(coeffs):
 
 
 class CropAndExtract():
-    def __init__(self, sadtalker_path):
+    def __init__(self, config):
 
         self.propress = Preprocesser()
         self.net_recon = define_net_recon(
             net_recon='resnet50', use_last_fc=False, init_path='')
 
-        param_dict = ms.load_checkpoint(
-            sadtalker_path['path_of_net_recon_model'])
-        ms.load_param_into_net(self.net_recon, param_dict)
+        checkpoint_dir = config.path.checkpoint_dir
+        path_net_recon = os.path.join(checkpoint_dir, config.path.path_of_net_recon_model)
+        path_bfm = os.path.join(checkpoint_dir, config.path.dir_of_bfm_fitting)
 
+        param_dict = ms.load_checkpoint(path_net_recon)
+        ms.load_param_into_net(self.net_recon, param_dict)
         self.net_recon.set_train(False)
-        self.lm3d_std = load_lm3d(sadtalker_path['dir_of_BFM_fitting'])
+
+        self.lm3d_std = load_lm3d(path_bfm)
 
     def generate(self, input_path, save_dir, crop_or_resize='crop', source_image_flag=False, pic_size=256):
 

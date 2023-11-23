@@ -9,8 +9,8 @@ class Audio2Pose(nn.Cell):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.seq_len = cfg.MODEL.CVAE.SEQ_LEN
-        self.latent_dim = cfg.MODEL.CVAE.LATENT_SIZE
+        self.seq_len = cfg.model.cvae.seq_len
+        self.latent_dim = cfg.model.cvae.latent_size
 
         self.audio_encoder = AudioEncoder()
         self.audio_encoder.set_train(False)

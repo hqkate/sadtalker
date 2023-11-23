@@ -5,7 +5,6 @@ import os
 from mindspore import ops
 import mindspore as ms
 import mindspore.dataset.vision as vision
-# from torchvision.transforms.functional import normalize # TODO!!
 
 from models.face3d.facexlib import init_detection_model, init_parsing_model
 from models.gfpgan.utils import img2tensor, imwrite

@@ -17,12 +17,15 @@ from utils.paste_pic import paste_pic
 from utils.videoio import save_video_with_watermark
 
 
-def load_cpk_facevid2vid(checkpoint_path, generator=None,
+def load_cpk_facevid2vid(config, generator=None,
                          kp_detector=None, he_estimator=None):
 
-    generator_path = checkpoint_path.get("generator_checkpoint", None)
-    kp_extractor_path = checkpoint_path.get("kp_extractor_checkpoint", None)
-    he_estimator_path = checkpoint_path.get("he_estimator_checkpoint", None)
+    ckpt_dir = config.path.get("checkpoint_dir", "")
+    generator_path = os.path.join(ckpt_dir, config.path.get("generator_checkpoint", None))
+    kp_extractor_path = os.path.join(ckpt_dir, config.path.get("kp_extractor_checkpoint", None))
+    he_estimator_path = os.path.join(ckpt_dir, config.path.get("he_estimator_checkpoint", None))
+
+    import pdb; pdb.set_trace()
 
     if generator_path is not None:
         generator_params = ms.load_checkpoint(generator_path)
@@ -35,24 +38,23 @@ def load_cpk_facevid2vid(checkpoint_path, generator=None,
         ms.load_param_into_net(he_estimator, estimator_params)
 
 
-def load_cpk_mapping(checkpoint_path, mapping):
+def load_cpk_mapping(config, mapping):
+    ckpt_dir = config.path.get("checkpoint_dir", "")
+    checkpoint_path = os.path.join(ckpt_dir, config.path.get("mappingnet_checkpoint", None))
     mapping_params = ms.load_checkpoint(checkpoint_path)
     ms.load_param_into_net(mapping, mapping_params)
 
 
 class AnimateFromCoeff():
-    def __init__(self, sadtalker_path):
+    def __init__(self, config):
 
-        with open(sadtalker_path['facerender_yaml']) as f:
-            config = yaml.safe_load(f)
-
-        generator = OcclusionAwareSPADEGenerator(**config['model_params']['generator_params'],
-                                                 **config['model_params']['common_params'])
-        kp_extractor = KPDetector(**config['model_params']['kp_detector_params'],
-                                  **config['model_params']['common_params'])
-        he_estimator = HEEstimator(**config['model_params']['he_estimator_params'],
-                                   **config['model_params']['common_params'])
-        mapping = MappingNet(**config['model_params']['mapping_params'])
+        generator = OcclusionAwareSPADEGenerator(**config.model_params.generator_params,
+                                                 **config.model_params.common_params)
+        kp_extractor = KPDetector(**config.model_params.kp_detector_params,
+                                  **config.model_params.common_params)
+        he_estimator = HEEstimator(**config.model_params.he_estimator_params,
+                                   **config.model_params.common_params)
+        mapping = MappingNet(**config.model_params.mapping_params)
 
         for param in generator.get_parameters():
             param.requires_grad = False
@@ -63,19 +65,8 @@ class AnimateFromCoeff():
         for param in mapping.get_parameters():
             param.requires_grad = False
 
-        if sadtalker_path is not None:
-            load_cpk_facevid2vid(
-                sadtalker_path, generator, kp_extractor, he_estimator)
-        else:
-            raise AttributeError(
-                "Checkpoint should be specified for video head pose estimator.")
-
-        if sadtalker_path['mappingnet_checkpoint'] is not None:
-            load_cpk_mapping(
-                sadtalker_path['mappingnet_checkpoint'], mapping=mapping)
-        else:
-            raise AttributeError(
-                "Checkpoint should be specified for video head pose estimator.")
+        load_cpk_facevid2vid(config, generator, kp_extractor, he_estimator)
+        load_cpk_mapping(config, mapping=mapping)
 
         self.kp_extractor = kp_extractor
         self.generator = generator
