@@ -12,7 +12,6 @@ from mindspore import context
 from mindspore.amp import auto_mixed_precision
 
 from utils.preprocess import CropAndExtract
-from utils.init_paths import init_path
 from datasets.generate_batch import get_data
 from datasets.generate_facerender_batch import get_facerender_data
 from models.audio2coeff import Audio2Coeff
