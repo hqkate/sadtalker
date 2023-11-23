@@ -1,7 +1,5 @@
 from mindspore import nn, ops
-import mindspore as ms
-import numpy as np
-import logging
+
 
 class Conv2d(nn.Cell):
     def __init__(self, cin, cout, kernel_size, stride, padding, use_residual=False, use_act=True, *args, **kwargs):

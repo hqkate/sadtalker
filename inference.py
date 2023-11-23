@@ -19,8 +19,10 @@ from models.facerender.animate import AnimateFromCoeff
 
 
 def main(args, config):
-    context.set_context(mode=context.GRAPH_MODE,
-                        device_target="Ascend", device_id=int(args.device_id))
+    context.set_context(mode=config.system.mode,
+                        device_target="Ascend",
+                        device_id=int(args.device_id)
+                        )
 
     pic_path = args.source_image
     audio_path = args.driven_audio

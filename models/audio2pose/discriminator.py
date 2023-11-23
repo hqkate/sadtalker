@@ -1,4 +1,4 @@
-from mindspore import nn, ops
+from mindspore import nn
 from mindspore.common import initializer
 
 
