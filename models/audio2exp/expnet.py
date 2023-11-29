@@ -1,8 +1,27 @@
 from mindspore import nn, ops
-import mindspore as ms
-import numpy as np
-import logging
-from models.audio2exp.conv import Conv2d
+
+
+class Conv2d(nn.Cell):
+    def __init__(self, cin, cout, kernel_size, stride, padding, use_residual=False, use_act=True, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.conv_block = nn.SequentialCell(
+            nn.Conv2d(cin, cout, kernel_size, stride, pad_mode='pad',
+                      padding=padding, has_bias=True),
+            nn.BatchNorm2d(cout, momentum=0.9)
+        )
+        self.act = nn.ReLU()
+        self.use_residual = use_residual
+        self.use_act = use_act
+
+    def construct(self, x):
+        out = self.conv_block(x)
+        if self.use_residual:
+            out += x
+
+        if self.use_act:
+            return self.act(out)
+        else:
+            return out
 
 
 class ExpNet(nn.Cell):

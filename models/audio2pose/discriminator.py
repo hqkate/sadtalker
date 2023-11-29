@@ -1,4 +1,4 @@
-from mindspore import nn, ops
+from mindspore import nn
 from mindspore.common import initializer
 
 
@@ -63,10 +63,10 @@ class PoseSequenceDiscriminator(nn.Cell):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        leaky = self.cfg.MODEL.DISCRIMINATOR.LEAKY_RELU
+        leaky = self.cfg.model.discriminator.leaky_relu
 
         self.seq = nn.SequentialCell(
-            ConvNormRelu('1d', cfg.MODEL.DISCRIMINATOR.INPUT_CHANNELS, 256, downsample=True, leaky=leaky),  # B, 256, 64
+            ConvNormRelu('1d', cfg.model.discriminator.input_channels, 256, downsample=True, leaky=leaky),  # B, 256, 64
             ConvNormRelu('1d', 256, 512, downsample=True, leaky=leaky),  # B, 512, 32
             ConvNormRelu('1d', 512, 1024, kernel_size=3, stride=1, padding=1, leaky=leaky),  # B, 1024, 16
             nn.Conv1d(1024, 1, kernel_size=3, stride=1, pad_mode='pad', padding=1, has_bias=True)  # B, 1, 16

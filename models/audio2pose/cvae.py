@@ -1,4 +1,3 @@
-import copy
 import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
@@ -8,13 +7,13 @@ from models.audio2pose.resunet import ResUNet
 class CVAE(nn.Cell):
     def __init__(self, cfg):
         super().__init__()
-        encoder_layer_sizes = cfg.MODEL.CVAE.ENCODER_LAYER_SIZES
-        decoder_layer_sizes = cfg.MODEL.CVAE.DECODER_LAYER_SIZES
-        latent_size = cfg.MODEL.CVAE.LATENT_SIZE
-        num_classes = cfg.DATASET.NUM_CLASSES
-        audio_emb_in_size = cfg.MODEL.CVAE.AUDIO_EMB_IN_SIZE
-        audio_emb_out_size = cfg.MODEL.CVAE.AUDIO_EMB_OUT_SIZE
-        seq_len = cfg.MODEL.CVAE.SEQ_LEN
+        encoder_layer_sizes = cfg.model.cvae.encoder_layer_sizes
+        decoder_layer_sizes = cfg.model.cvae.decoder_layer_sizes
+        latent_size = cfg.model.cvae.latent_size
+        num_classes = cfg.dataset.num_classes
+        audio_emb_in_size = cfg.model.cvae.audio_emb_in_size
+        audio_emb_out_size = cfg.model.cvae.audio_emb_out_size
+        seq_len = cfg.model.cvae.seq_len
 
         self.latent_size = latent_size
 
