@@ -14,15 +14,12 @@ class DatasetWrapper(object):
         data_list (List(Tuple)): source data items (e.g., containing image path and raw annotation)
     """
 
-    def __init__(
-        self,
-        batch_data
-    ):
+    def __init__(self, batch_data):
         self._index = 0
         self.data_list = [batch_data]
         # WARNING: shallow copy. Do deep copy if necessary.
         # _data = self.data_list[0].copy()
-        self.output_columns = ['data']
+        self.output_columns = ["data"]
 
     def __getitem__(self, index):
         # WARNING: shallow copy. Do deep copy if necessary.

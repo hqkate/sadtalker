@@ -33,11 +33,16 @@ class TrainOneStepCell(nn.Cell):
         self.optimizer = optimizer
         self.weights = self.optimizer.parameters
         self.grad = ops.GradOperation(get_by_list=True, sens_param=True)
-        self.scale_sense = Parameter(Tensor(initial_scale_sense, dtype=mstype.float32), name="scale_sense")
+        self.scale_sense = Parameter(
+            Tensor(initial_scale_sense, dtype=mstype.float32), name="scale_sense"
+        )
         self.reducer_flag = False
         self.grad_reducer = None
         self.parallel_mode = context.get_auto_parallel_context("parallel_mode")
-        if self.parallel_mode in [ParallelMode.DATA_PARALLEL, ParallelMode.HYBRID_PARALLEL]:
+        if self.parallel_mode in [
+            ParallelMode.DATA_PARALLEL,
+            ParallelMode.HYBRID_PARALLEL,
+        ]:
             self.reducer_flag = True
         if self.reducer_flag:
             mean = context.get_auto_parallel_context("gradients_mean")
@@ -45,7 +50,9 @@ class TrainOneStepCell(nn.Cell):
                 degree = context.get_auto_parallel_context("device_num")
             else:
                 degree = get_group_size()
-            self.grad_reducer = nn.DistributedGradReducer(optimizer.parameters, mean, degree)
+            self.grad_reducer = nn.DistributedGradReducer(
+                optimizer.parameters, mean, degree
+            )
 
 
 class GTrainOneStepCell(TrainOneStepCell):
@@ -63,7 +70,9 @@ class GTrainOneStepCell(TrainOneStepCell):
         return self
 
     def construct(self, x_gt, x_class, x_indiv_mels):
-        network_fwd_bwd = ops.value_and_grad(self.network, grad_position=None, weights=self.weights, has_aux=True)
+        network_fwd_bwd = ops.value_and_grad(
+            self.network, grad_position=None, weights=self.weights, has_aux=True
+        )
         (loss, pred), grads = network_fwd_bwd((x_gt, x_class, x_indiv_mels))
 
         if self.reducer_flag:
@@ -95,7 +104,6 @@ class VAEGTrainer:
         self.cfg = cfg
 
     def run(self, x_gt, x_class, x_indiv_mels):
-
         print("running train_one_step_g ...")
         self.train_one_step_g.set_train(not self.finetune)
         loss_g, output = self.train_one_step_g(x_gt, x_class, x_indiv_mels)
@@ -119,14 +127,13 @@ class VAEGTrainer:
         dataset = dataset.repeat(repeats_num)
         dataloader = dataset.create_dict_iterator()
         for num_batch, sample in enumerate(dataloader):
-
             if num_batch >= total_steps:
                 print("Reached the target number of iterations")
                 break
 
-            x_gt = sample['data']['gt']
-            x_class = sample['data']['class']
-            x_indiv_mels = sample['data']['indiv_mels']
+            x_gt = sample["data"]["gt"]
+            x_class = sample["data"]["class"]
+            x_indiv_mels = sample["data"]["indiv_mels"]
 
             loss_g, loss_d = self.run(x_gt, x_class, x_indiv_mels)
 
@@ -154,14 +161,13 @@ class GWithLossCell(nn.Cell):
         self.mse = nn.MSELoss()
 
     def construct(self, data_batch):
-
         data_batch = self.generator(*data_batch)
 
-        logits = data_batch['pose_motion_pred']
-        labels = data_batch['pose_motion_gt']
+        logits = data_batch["pose_motion_pred"]
+        labels = data_batch["pose_motion_gt"]
 
-        mu = data_batch['mu']
-        logvar = data_batch['logvar']
+        mu = data_batch["mu"]
+        logvar = data_batch["logvar"]
         std = ops.Exp()(0.5 * logvar)
 
         loss_mse = self.mse(logits, labels)
@@ -173,7 +179,6 @@ class GWithLossCell(nn.Cell):
 
         output_pred = output_pred.astype(mstype.float32)
         loss_adversarial = self.criterion(output_pred, real_target)
-
 
         loss_g = loss_mse + loss_kl + 0.7 * loss_adversarial
 
@@ -199,8 +204,7 @@ class DWithLossCell(nn.Cell):
         real_target = self.real_target.expand_as(real_pred)
         fake_target = self.fake_target.expand_as(fake_pred)
 
-        loss_adversarial = (
-            self.criterion(real_pred, real_target)
-            + self.criterion(fake_pred, fake_target)
+        loss_adversarial = self.criterion(real_pred, real_target) + self.criterion(
+            fake_pred, fake_target
         )
         return loss_adversarial

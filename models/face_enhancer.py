@@ -2,7 +2,7 @@ from models.gfpgan.gfpganer import GFPGANer
 
 
 model_path = "checkpoints/ms/ms_gfpgan.ckpt"
-arch = 'clean'
+arch = "clean"
 channel_multiplier = 2
 bg_upsampler = None
 
@@ -11,4 +11,5 @@ restorer = GFPGANer(
     upscale=2,
     arch=arch,
     channel_multiplier=channel_multiplier,
-    bg_upsampler=bg_upsampler)
+    bg_upsampler=bg_upsampler,
+)

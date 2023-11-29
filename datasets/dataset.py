@@ -32,7 +32,8 @@ class BaseDataset(object):
         for f in data_dir:
             if not os.path.exists(f):
                 raise ValueError(
-                    f"data_dir '{f}' does not existed. Please check the yaml file for both train and eval")
+                    f"data_dir '{f}' does not existed. Please check the yaml file for both train and eval"
+                )
         self.data_dir = data_dir
 
         if label_file is not None:

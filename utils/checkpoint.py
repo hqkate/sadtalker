@@ -22,7 +22,14 @@ class CheckpointManager:
 
     """
 
-    def __init__(self, ckpt_save_dir, ckpt_save_policy="top_k", k=10, prefer_low_perf=False, del_past=True):
+    def __init__(
+        self,
+        ckpt_save_dir,
+        ckpt_save_policy="top_k",
+        k=10,
+        prefer_low_perf=False,
+        del_past=True,
+    ):
         self.ckpt_save_dir = ckpt_save_dir
         self._ckpt_filelist = []
         self.ckpt_save_policy = ckpt_save_policy
@@ -49,10 +56,12 @@ class CheckpointManager:
                 os.remove(file_name)
         except OSError:
             _logger.warning(
-                f"OSError, failed to remove the older ckpt file {file_name}.")
+                f"OSError, failed to remove the older ckpt file {file_name}."
+            )
         except ValueError:
             _logger.warning(
-                f"ValueError, failed to remove the older ckpt file {file_name}.")
+                f"ValueError, failed to remove the older ckpt file {file_name}."
+            )
 
     def save_top_k(self, network, perf, ckpt_name, verbose=True):
         """Save and return Top K checkpoint address and accuracy."""
@@ -64,19 +73,15 @@ class CheckpointManager:
             to_del = self.ckpt_queue.pop(-1)
             # save if the perf is better than the minimum in the heap
             if to_del[1] != ckpt_name:
-                ms.save_checkpoint(network, os.path.join(
-                    self.ckpt_save_dir, ckpt_name))
+                ms.save_checkpoint(network, os.path.join(self.ckpt_save_dir, ckpt_name))
                 # del minimum
-                self.remove_ckpt_file(os.path.join(
-                    self.ckpt_save_dir, to_del[1]))
+                self.remove_ckpt_file(os.path.join(self.ckpt_save_dir, to_del[1]))
         else:
-            ms.save_checkpoint(network, os.path.join(
-                self.ckpt_save_dir, ckpt_name))
+            ms.save_checkpoint(network, os.path.join(self.ckpt_save_dir, ckpt_name))
 
     def save_latest_k(self, network, ckpt_name):
         """Save latest K checkpoint."""
-        ms.save_checkpoint(network, os.path.join(
-            self.ckpt_save_dir, ckpt_name))
+        ms.save_checkpoint(network, os.path.join(self.ckpt_save_dir, ckpt_name))
         self.ckpt_queue.append(ckpt_name)
         if len(self.ckpt_queue) > self.k:
             to_del = self.ckpt_queue.pop(0)
@@ -89,8 +94,7 @@ class CheckpointManager:
     def save(self, network, perf=None, ckpt_name=None):
         """Save checkpoint according to different save strategy."""
         if self.ckpt_save_policy is None:
-            ms.save_checkpoint(network, os.path.join(
-                self.ckpt_save_dir, ckpt_name))
+            ms.save_checkpoint(network, os.path.join(self.ckpt_save_dir, ckpt_name))
         elif self.ckpt_save_policy == "top_k":
             if perf is None:
                 raise ValueError(

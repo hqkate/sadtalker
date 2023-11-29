@@ -107,8 +107,7 @@ class EvalSaveCallback(Callback):
         loss = _handle_loss(cb_params.net_outputs)
         cur_epoch = cb_params.cur_epoch_num
         data_sink_mode = cb_params.dataset_sink_mode
-        cur_step_in_epoch = (cb_params.cur_step_num -
-                             1) % cb_params.batch_num + 1
+        cur_step_in_epoch = (cb_params.cur_step_num - 1) % cb_params.batch_num + 1
 
         self._loss_avg_meter.update(self._loss_reduce(loss))
 
@@ -121,10 +120,14 @@ class EvalSaveCallback(Callback):
                 if not isinstance(cur_lr, (Tuple, List))
                 else [lr.asnumpy().squeeze() for lr in cur_lr]
             )
-            cur_lr = float(cur_lr) if not isinstance(
-                cur_lr, (Tuple, List)) else [float(lr) for lr in cur_lr]
-            per_step_time = (time.time() - self.step_start_time) * \
-                1000 / self.log_interval
+            cur_lr = (
+                float(cur_lr)
+                if not isinstance(cur_lr, (Tuple, List))
+                else [float(lr) for lr in cur_lr]
+            )
+            per_step_time = (
+                (time.time() - self.step_start_time) * 1000 / self.log_interval
+            )
             fps = self.batch_size * 1000 / per_step_time
             # loss = self._loss_avg_meter.val.asnumpy()
             loss = self._loss_avg_meter.val
@@ -137,8 +140,9 @@ class EvalSaveCallback(Callback):
             msg = (
                 f"epoch: [{cur_epoch}/{cb_params.epoch_num+self.start_epoch}] "
                 f"step: [{cur_step_in_epoch}/{cb_params.batch_num}], "
-                f"loss: {loss:.6f}, " + lr_str +
-                f"per step time: {per_step_time:.3f} ms, fps per card: {fps:.2f} img/s"
+                f"loss: {loss:.6f}, "
+                + lr_str
+                + f"per step time: {per_step_time:.3f} ms, fps per card: {fps:.2f} img/s"
             )
 
             print(msg)
@@ -183,7 +187,10 @@ class EvalSaveCallback(Callback):
 
         eval_done = False
         if self.loader_eval is not None:
-            if cur_epoch >= self.val_start_epoch and (cur_epoch - self.val_start_epoch) % self.val_interval == 0:
+            if (
+                cur_epoch >= self.val_start_epoch
+                and (cur_epoch - self.val_start_epoch) % self.val_interval == 0
+            ):
                 eval_start = time.time()
                 if self.ema is not None:
                     # swap ema weight and network weight
@@ -194,11 +201,9 @@ class EvalSaveCallback(Callback):
                 if self.is_main_device:
                     perf = measures[self.main_indicator]
                     eval_time = time.time() - eval_start
-                    print(
-                        f"Performance: {measures}, eval time: {eval_time}")
+                    print(f"Performance: {measures}, eval time: {eval_time}")
             else:
-                measures = {
-                    m_name: None for m_name in self.net_evaluator.metric_names}
+                measures = {m_name: None for m_name in self.net_evaluator.metric_names}
                 eval_time = 0
                 perf = 1e-8
         else:
@@ -208,25 +213,29 @@ class EvalSaveCallback(Callback):
         if self.is_main_device:
             # save best models
             if (self.main_indicator == "train_loss" and perf < self.best_perf) or (
-                self.main_indicator != "train_loss" and eval_done and perf > self.best_perf
+                self.main_indicator != "train_loss"
+                and eval_done
+                and perf > self.best_perf
             ):  # when val_while_train enabled, only find best checkpoint after eval done.
                 self.best_perf = perf
                 # ema weight will be saved if enabled.
-                save_checkpoint(self.network, os.path.join(
-                    self.ckpt_save_dir, "best.ckpt"))
+                save_checkpoint(
+                    self.network, os.path.join(self.ckpt_save_dir, "best.ckpt")
+                )
 
                 print(
-                    f"=> Best {self.main_indicator}: {self.best_perf}, checkpoint saved.")
+                    f"=> Best {self.main_indicator}: {self.best_perf}, checkpoint saved."
+                )
 
             # save history checkpoints
-            self.ckpt_manager.save(
-                self.network, perf, ckpt_name=f"e{cur_epoch}.ckpt")
+            self.ckpt_manager.save(self.network, perf, ckpt_name=f"e{cur_epoch}.ckpt")
             ms.save_checkpoint(
                 cb_params.train_network,
                 os.path.join(self.ckpt_save_dir, "train_resume.ckpt"),
-                append_dict={"epoch_num": cur_epoch,
-                             #  "loss_scale": loss_scale_manager.get_loss_scale()
-                             },
+                append_dict={
+                    "epoch_num": cur_epoch,
+                    #  "loss_scale": loss_scale_manager.get_loss_scale()
+                },
             )
 
         # swap back network weight and ema weight. MUST execute after model saving and before next-step training
@@ -239,10 +248,13 @@ class EvalSaveCallback(Callback):
     def on_train_end(self, run_context):
         if self.is_main_device:
             print(
-                f"=> Best {self.main_indicator}: {self.best_perf} \nTraining completed!")
+                f"=> Best {self.main_indicator}: {self.best_perf} \nTraining completed!"
+            )
 
             if self.ckpt_save_policy == "top_k":
                 log_str = f"Top K checkpoints:\n{self.main_indicator}\tcheckpoint\n"
                 for p, ckpt_name in self.ckpt_manager.get_ckpt_queue():
-                    log_str += f"{p:.4f}\t{os.path.join(self.ckpt_save_dir, ckpt_name)}\n"
+                    log_str += (
+                        f"{p:.4f}\t{os.path.join(self.ckpt_save_dir, ckpt_name)}\n"
+                    )
                 print(log_str)

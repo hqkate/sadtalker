@@ -82,7 +82,8 @@ class Evaluator:
     ):
         # create iterator
         self.iterator = dataloader.create_tuple_iterator(
-            num_epochs=num_epochs, output_numpy=False, do_copy=False)
+            num_epochs=num_epochs, output_numpy=False, do_copy=False
+        )
         self.num_batches_eval = dataloader.get_dataset_size()
 
         # dataset output columns
@@ -122,14 +123,19 @@ class Evaluator:
                     meta_info = [data[x] for x in self.meta_data_indices]
                 else:
                     # assume the indices not in input_indices or label_indices are all meta_data_indices
-                    input_indices = set(
-                        self.input_indices) if self.input_indices is not None else {0}
+                    input_indices = (
+                        set(self.input_indices)
+                        if self.input_indices is not None
+                        else {0}
+                    )
                     label_indices = (
-                        set(self.label_indices) if self.label_indices is not None else set(
-                            range(1, len(data), 1))
+                        set(self.label_indices)
+                        if self.label_indices is not None
+                        else set(range(1, len(data), 1))
                     )
                     meta_data_indices = sorted(
-                        set(range(len(data))) - input_indices - label_indices)
+                        set(range(len(data))) - input_indices - label_indices
+                    )
                     meta_info = [data[x] for x in meta_data_indices]
 
                 data_info["meta_info"] = meta_info
@@ -140,8 +146,7 @@ class Evaluator:
                 #  shape_list = [h, w, ratio_h, ratio_w] already contain raw image shape.
                 for k in possible_keys_for_postprocess:
                     if k in self.loader_output_columns:
-                        data_info[k] = data[self.loader_output_columns.index(
-                            k)]
+                        data_info[k] = data[self.loader_output_columns.index(k)]
 
                 preds = self.postprocessor(preds, **data_info)
 
