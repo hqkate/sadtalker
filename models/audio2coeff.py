@@ -29,7 +29,7 @@ class Audio2Coeff():
         checkpoint_dir = cfg_exp.path.checkpoint_dir
         netG = ExpNet()
         self.audio2exp_model = Audio2Exp(
-            netG, cfg_exp, prepare_training_loss=False)
+            netG, cfg_exp)
         path_audio2exp_checkpoint = os.path.join(checkpoint_dir, cfg_exp.path.audio2exp_checkpoint)
         load_cpk(path_audio2exp_checkpoint, model=self.audio2exp_model)
 

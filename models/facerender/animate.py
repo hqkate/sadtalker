@@ -25,8 +25,6 @@ def load_cpk_facevid2vid(config, generator=None,
     kp_extractor_path = os.path.join(ckpt_dir, config.path.get("kp_extractor_checkpoint", None))
     he_estimator_path = os.path.join(ckpt_dir, config.path.get("he_estimator_checkpoint", None))
 
-    import pdb; pdb.set_trace()
-
     if generator_path is not None:
         generator_params = ms.load_checkpoint(generator_path)
         ms.load_param_into_net(generator, generator_params)

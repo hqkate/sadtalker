@@ -55,7 +55,9 @@ class CropAndExtract:
         )
 
         checkpoint_dir = config.path.checkpoint_dir
-        path_net_recon = os.path.join(checkpoint_dir, config.path.path_of_net_recon_model)
+        path_net_recon = os.path.join(
+            checkpoint_dir, config.path.path_of_net_recon_model
+        )
         path_bfm = os.path.join(checkpoint_dir, config.path.dir_of_bfm_fitting)
 
         param_dict = ms.load_checkpoint(path_net_recon)
@@ -64,8 +66,14 @@ class CropAndExtract:
 
         self.lm3d_std = load_lm3d(path_bfm)
 
-    def generate(self, input_path, save_dir, crop_or_resize='crop', source_image_flag=False, pic_size=256):
-
+    def generate(
+        self,
+        input_path,
+        save_dir,
+        crop_or_resize="crop",
+        source_image_flag=False,
+        pic_size=256,
+    ):
         pic_name = os.path.splitext(os.path.split(input_path)[-1])[0]
 
         landmarks_path = os.path.join(save_dir, pic_name + "_landmarks.txt")

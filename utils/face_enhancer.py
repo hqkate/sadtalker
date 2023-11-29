@@ -70,7 +70,7 @@ def enhancer_generator_no_len(images, method="gfpgan", bg_upsampler="realesrgan"
         raise ValueError(f"Wrong model version {method}.")
 
     # ------------------------ set up background upsampler ------------------------
-    if bg_upsampler == 'realesrgan':
+    if bg_upsampler == "realesrgan":
         raise Exception("realesrgan is still under development.")
         from basicsr.archs.rrdbnet_arch import RRDBNet
         from realesrgan import RealESRGANer
