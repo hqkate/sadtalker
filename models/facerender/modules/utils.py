@@ -2,9 +2,6 @@ import mindspore as ms
 from mindspore import nn, ops
 from mindspore import dtype as mstype
 
-# from ..sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
-# from ..sync_batchnorm import SynchronizedBatchNorm3d as BatchNorm3d
-
 from mindspore.nn import BatchNorm2d, BatchNorm3d
 from models.facerender.modules.spectralnorm import Conv2dNormalized
 from models.facerender.modules.instancenorm import InstanceNorm2d

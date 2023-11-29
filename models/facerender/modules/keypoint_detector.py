@@ -1,7 +1,6 @@
 import mindspore as ms
 from mindspore import nn, ops
 
-# from ..sync_batchnorm import SynchronizedBatchNorm2d as BatchNorm2d
 from mindspore.nn import BatchNorm2d
 from models.facerender.modules.utils import KPHourglass, make_coordinate_grid, AntiAliasInterpolation2d, ResBottleneck
 
