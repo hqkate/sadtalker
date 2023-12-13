@@ -29,9 +29,9 @@ class NetWithLossWrapper(nn.Cell):
         Returns:
             loss_val (Tensor): loss value
         """
-        outputs = self._net(args[0])
+        outputs = self._net(args[0], args[1], args[2])
 
-        loss_val = self._loss_fn(*outputs)
+        loss_val = self._loss_fn(outputs, args[3])
 
         return loss_val
 

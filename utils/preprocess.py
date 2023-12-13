@@ -237,6 +237,8 @@ class CropAndExtract:
         os.makedirs(img_path, exist_ok=True)  # 图像保存路径
         # info_path =  os.path.join(save_path, 'crop_info.mat')
 
+        import pdb; pdb.set_trace()
+
         coeff_path = os.path.join(save_path, video_name + ".mat")
 
         # load input
@@ -307,6 +309,8 @@ class CropAndExtract:
                 png_path, cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR)
             )  # 保存crop的图像
             i += 1
+
+        import pdb; pdb.set_trace()
 
         # 2. get the landmark according to the detected face.
         if not os.path.isfile(landmarks_path):

@@ -103,6 +103,14 @@ def create_parser():
         "--verbose", action="store_true", help="saving the intermedia output or not"
     )
 
+    # train facerender parameters
+    parser.add_argument(
+        "--train_list",
+        type=str,
+        default=None,
+        help="path to the training file list of face render."
+    )
+
     # net structure and parameters
     parser.add_argument(
         "--net_recon",

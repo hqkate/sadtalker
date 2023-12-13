@@ -96,7 +96,7 @@ def get_facerender_data(
     )
 
     target_semantics_np = np.asarray(target_semantics_np).astype("float32")
-    data["target_semantics_list"] = ms.Tensor(target_semantics_np)
+    data["target_semantics"] = ms.Tensor(target_semantics_np)
     data["video_name"] = video_name
     data["audio_path"] = audio_path
 

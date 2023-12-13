@@ -91,14 +91,12 @@ class TestFaceRenderDataset:
         self.size = size
         self.semantic_radius = semantic_radius
 
-    def prepare_source_features(self, pic_path, first_coeff_path):
+    def prepare_source_features(self, pic_path, first_coeff_path, is_train=False):
         img1 = Image.open(pic_path)
         source_image = np.array(img1)
         source_image = img_as_float32(source_image)
         source_image = transform.resize(source_image, (self.size, self.size, 3))
         source_image = source_image.transpose((2, 0, 1))
-        source_image_ts = ms.Tensor(source_image).unsqueeze(0)
-        source_image_ts = source_image_ts.repeat(self.batch_size, axis=0)
 
         source_semantics_dict = scio.loadmat(first_coeff_path)
 
@@ -112,12 +110,19 @@ class TestFaceRenderDataset:
             source_semantics, self.semantic_radius
         )
         source_semantics_new = np.asarray(source_semantics_new).astype("float32")
-        source_semantics_ts = ms.Tensor(source_semantics_new).unsqueeze(0)
-        source_semantics_ts = source_semantics_ts.repeat(self.batch_size, axis=0)
+
+        if not is_train:
+            source_image_ts = ms.Tensor(source_image).unsqueeze(0)
+            source_image_ts = source_image_ts.repeat(self.batch_size, axis=0)
+            source_semantics_ts = ms.Tensor(source_semantics_new).unsqueeze(0)
+            source_semantics_ts = source_semantics_ts.repeat(self.batch_size, axis=0)
+        else:
+            source_image_ts = ms.Tensor(source_image)
+            source_semantics_ts = ms.Tensor(source_semantics_new)
 
         return source_image_ts, source_semantics, source_semantics_ts
 
-    def prepare_target_features(self, coeff_path, source_semantics):
+    def prepare_target_features(self, coeff_path, source_semantics, frame_idx=None, tgt_img_path=None):
         txt_path = os.path.splitext(coeff_path)[0]
 
         generated_dict = scio.loadmat(coeff_path)
@@ -149,30 +154,50 @@ class TestFaceRenderDataset:
         target_semantics_list = []
         frame_num = generated_3dmm.shape[0]
 
-        for frame_idx in range(frame_num):
+        if frame_idx is None:
+            for frame_idx in range(frame_num):
+                target_semantics = transform_semantic_target(
+                    generated_3dmm, frame_idx, self.semantic_radius
+                )
+                target_semantics_list.append(target_semantics)
+
+            remainder = frame_num % self.batch_size
+            if remainder != 0:
+                for _ in range(self.batch_size - remainder):
+                    target_semantics_list.append(target_semantics)
+
+            # frame_num 70 semantic_radius*2+1
+            target_semantics_np = np.array(target_semantics_list)
+            target_semantics_np = target_semantics_np.reshape(
+                self.batch_size,
+                -1,
+                target_semantics_np.shape[-2],
+                target_semantics_np.shape[-1],
+            )
+
+            target_semantics_np = np.asarray(target_semantics_np).astype("float32")
+            target_semantics_ts = ms.Tensor(target_semantics_np)
+
+        else:
             target_semantics = transform_semantic_target(
                 generated_3dmm, frame_idx, self.semantic_radius
             )
-            target_semantics_list.append(target_semantics)
+            target_semantics_np = np.array(target_semantics)
+            target_semantics_np = np.asarray(target_semantics_np).astype("float32")
+            target_semantics_ts = ms.Tensor(target_semantics_np)
 
-        remainder = frame_num % self.batch_size
-        if remainder != 0:
-            for _ in range(self.batch_size - remainder):
-                target_semantics_list.append(target_semantics)
+        if tgt_img_path is not None:
+            tgt_img = Image.open(tgt_img_path)
+            target_image = np.array(tgt_img)
+            target_image = img_as_float32(target_image)
+            target_image = transform.resize(target_image, (self.size, self.size, 3))
+            target_image = target_image.transpose((2, 0, 1))
+            target_image_ts = ms.Tensor(target_image)
 
-        # frame_num 70 semantic_radius*2+1
-        target_semantics_np = np.array(target_semantics_list)
-        target_semantics_np = target_semantics_np.reshape(
-            self.batch_size,
-            -1,
-            target_semantics_np.shape[-2],
-            target_semantics_np.shape[-1],
-        )
+        else:
+            target_image_ts = None
 
-        target_semantics_np = np.asarray(target_semantics_np).astype("float32")
-        target_semantics_ts = ms.Tensor(target_semantics_np)
-
-        return frame_num, target_semantics_ts
+        return frame_num, target_semantics_ts, target_image_ts
 
     def __next__(self):
         if self._index >= 1:
@@ -198,13 +223,13 @@ class TestFaceRenderDataset:
         data["source_semantics"] = source_semantics_ts
 
         # target
-        frame_num, target_semantics_ts = self.prepare_target_features(
+        frame_num, target_semantics_ts, _ = self.prepare_target_features(
             self.coeff_path, source_semantics
         )
 
         video_name = os.path.splitext(os.path.split(self.coeff_path)[-1])[0]
 
-        data["target_semantics_list"] = target_semantics_ts
+        data["target_semantics"] = target_semantics_ts
         data["frame_num"] = frame_num
         data["video_name"] = video_name
         data["audio_path"] = self.audio_path
@@ -255,9 +280,16 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
 
         self.all_videos = get_img_paths(train_list)
         self.syncnet_T = syncnet_T
+        self.output_columns = [
+            "source_image",
+            "source_semantics",
+            "target_semantics",
+            "target_image_ts",
+            "frame_num",
+        ]
 
-    def get_label_features(self):
-        pass
+    def get_output_columns(self):
+        return self.output_columns
 
     def __next__(self):
         if self._index >= len(self.all_videos):
@@ -278,24 +310,27 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
 
         ##随机选取一帧,得到窗口并读取图片
         valid_paths = list(sorted(image_paths))[: len(image_paths) - self.syncnet_T]
-        img_path = random.choice(valid_paths)  # 随机选取一帧
+        src_img_path = valid_paths[0]
+        tgt_img_path = random.choice(valid_paths)  # 随机选取一帧
+        frame_id = int(os.path.basename(tgt_img_path).split("_")[-1].split(".")[0])
 
         # source
         (
             source_image_ts,
             source_semantics,
             source_semantics_ts,
-        ) = self.prepare_source_features(img_path, first_coeff_path)
+        ) = self.prepare_source_features(src_img_path, first_coeff_path, is_train=True)
 
         data["source_image"] = source_image_ts
         data["source_semantics"] = source_semantics_ts
 
         # target
-        frame_num, target_semantics_ts = self.prepare_target_features(
-            net_coeff_path, source_semantics
+        frame_num, target_semantics_ts, target_image_ts = self.prepare_target_features(
+            net_coeff_path, source_semantics, frame_id, tgt_img_path
         )
 
-        data["target_semantics_list"] = target_semantics_ts
+        data["target_semantics"] = target_semantics_ts
+        data["target_image_ts"] = target_image_ts
         data["frame_num"] = frame_num
 
         input_yaw_list = self.args.input_yaw
@@ -305,13 +340,16 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
         if input_yaw_list is not None:
             yaw_c_seq = gen_camera_pose(input_yaw_list, frame_num, self.batch_size)
             data["yaw_c_seq"] = ms.Tensor(yaw_c_seq)
+            self.output_columns.append("yaw_c_seq")
         if input_pitch_list is not None:
             pitch_c_seq = gen_camera_pose(input_pitch_list, frame_num, self.batch_size)
             data["pitch_c_seq"] = ms.Tensor(pitch_c_seq)
+            self.output_columns.append("pitch_c_seq")
         if input_roll_list is not None:
             roll_c_seq = gen_camera_pose(input_roll_list, frame_num, self.batch_size)
             data["roll_c_seq"] = ms.Tensor(roll_c_seq)
+            self.output_columns.append("roll_c_seq")
 
-        data["img_gt"] = img_path
+        output_tuple = tuple(data[k] for k in self.output_columns)
 
-        return data
+        return output_tuple

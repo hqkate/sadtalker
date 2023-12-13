@@ -82,31 +82,24 @@ class Conv2dNormalized(nn.Cell):
         self.has_bias = has_bias
 
         if self.has_bias:
-            self.bias = Parameter(initializer(
-                "zeros", (out_channels,)), name="bias")
+            self.bias = Parameter(initializer("zeros", (out_channels,)), name="bias")
 
         self.weight_orig = Parameter(
             initializer(
                 Normal(sigma=0.02),
-                (out_channels, in_channels, kernel_size, kernel_size)
+                (out_channels, in_channels, kernel_size, kernel_size),
             ),
-            name="weight_orig"
+            name="weight_orig",
         )
 
         self.weight_u = Parameter(
-            self.initialize_param(
-                out_channels, 1
-            ),
-            requires_grad=False,
-            name="weight_u"
+            self.initialize_param(out_channels, 1), requires_grad=False, name="weight_u"
         )
 
         self.weight_v = Parameter(
-            self.initialize_param(
-                in_channels * kernel_size * kernel_size, 1
-            ),
+            self.initialize_param(in_channels * kernel_size * kernel_size, 1),
             requires_grad=False,
-            name="weight_v"
+            name="weight_v",
         )
 
         if is_ascend():
@@ -149,8 +142,7 @@ class Conv2dNormalized(nn.Cell):
 
     def construct(self, x):
         """Feed forward"""
-        weight = self.normalize_weights(
-            self.weight_orig, self.weight_u, self.weight_v)
+        weight = self.normalize_weights(self.weight_orig, self.weight_u, self.weight_v)
         output = self.conv2d(x, weight)
         if self.has_bias:
             output = self.bias_add(output, self.bias)

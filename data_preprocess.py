@@ -4,14 +4,17 @@ from functools import partial
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from addict import Dict
+from utils.arg_parser import parse_args_and_config
+
+args, cfg = parse_args_and_config()
+
+from mindspore import context
 from train_expnet import init_path
-from datasets.generate_batch import get_data
-from utils.get_file import Get_img_paths
+from utils.get_file import get_img_paths
 from utils.preprocess import CropAndExtract
+from datasets.dataset_audio2coeff import TestDataset
 from models.audio2coeff import Audio2Coeff
-
-
-os.environ["DEVICE_ID"] = "7"
 
 
 template = "./ffmpeg-6.0-amd64-static/ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
@@ -46,11 +49,6 @@ def extract_audios_from_videos(vfile, audio_save_dir, video_org_dir):
         return
 
 
-def get_audio2coeffs(first_coeff_path, audio_path):
-    batch = get_data(first_coeff_path, audio_path, None, False)
-    coeff_path = audio_to_coeff.generate(batch, coeff_save_dir, 0, None)
-
-
 def mp_handler(job):
     vfile, save_root, org_root, gpu_id = job
     print(
@@ -76,6 +74,11 @@ def mp_handler_audio2coeff(job):
 
 
 if __name__ == "__main__":
+    config = Dict(cfg)
+    context.set_context(
+        mode=config.system.mode, device_target="Ascend", device_id=int(args.device_id)
+    )
+
     # 预处理结果保存的路径
     preprocess_save_dir = "/disk1/katekong/sadtalker/data_train/"
     os.makedirs(preprocess_save_dir, exist_ok=True)
@@ -85,7 +88,7 @@ if __name__ == "__main__":
     video_org_dir = "/disk1/katekong/sadtalker/data_train/video/"
     audio_save_dir = preprocess_save_dir + "/audio/"
     coeff_save_dir = preprocess_save_dir + "/coeffs/"
-    video_paths = Get_img_paths(input_dir, ext="mp4")
+    video_paths = get_img_paths(input_dir, ext="mp4")
     # extract_audios_from_videos_multi(video_paths, audio_save_dir, video_org_dir)
 
     # step2： 这将花费相当长的时间
@@ -95,12 +98,11 @@ if __name__ == "__main__":
     size = 256
     old_version = False
     preprocess = "crop"
-    sadtalker_paths = init_path(checkpoint_dir, config_dir, preprocess)
     ngpu = 1  # 采用GPU的数量
-    fa = [CropAndExtract(sadtalker_paths) for _ in range(ngpu)]  # 构建GPU
+    fa = [CropAndExtract(config.preprocess) for _ in range(ngpu)]  # 构建GPU
 
     pose_save_dir = preprocess_save_dir + "/pose/"  # 保存ρ的路径
-    os.makedirs(preprocess_save_dir, exist_ok=True)
+    os.makedirs(pose_save_dir, exist_ok=True)
     jobs = [
         (vfile, pose_save_dir, video_org_dir, i % ngpu)
         for i, vfile in enumerate(video_paths)
@@ -109,16 +111,20 @@ if __name__ == "__main__":
     futures = [p.submit(mp_handler, j) for j in jobs]
     _ = [r.result() for r in tqdm(as_completed(futures), total=len(futures))]
 
-    # # step3: audio2coeff
-    # audio_to_coeff = Audio2Coeff(sadtalker_paths)
-    # fa_audio2coeff = [audio_to_coeff for _ in range(ngpu)]  # 构建GPU
+    import pdb
 
-    # pose_save_dir = preprocess_save_dir + "/pose/"  # 保存ρ的路径
-    # os.makedirs(preprocess_save_dir, exist_ok=True)
-    # jobs = [
-    #     (vfile, pose_save_dir, video_org_dir, i % ngpu)
-    #     for i, vfile in enumerate(video_paths)
-    # ]
-    # p = ThreadPoolExecutor(ngpu)
-    # futures = [p.submit(mp_handler, j) for j in jobs]
-    # _ = [r.result() for r in tqdm(as_completed(futures), total=len(futures))]
+    pdb.set_trace()
+
+    # step3: audio2coeff
+    audio_to_coeff = Audio2Coeff(config)
+    fa_audio2coeff = [audio_to_coeff for _ in range(ngpu)]  # 构建GPU
+
+    predcoeff_save_dir = preprocess_save_dir + "/pred_coeffs/"
+    os.makedirs(predcoeff_save_dir, exist_ok=True)
+    jobs = [
+        (vfile, predcoeff_save_dir, video_org_dir, i % ngpu)
+        for i, vfile in enumerate(video_paths)
+    ]
+    p = ThreadPoolExecutor(ngpu)
+    futures = [p.submit(mp_handler, j) for j in jobs]
+    _ = [r.result() for r in tqdm(as_completed(futures), total=len(futures))]

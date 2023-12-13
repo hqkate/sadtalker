@@ -93,59 +93,6 @@ class DTrainOneStepCell(TrainOneStepCell):
         return loss
 
 
-class VAEGTrainer:
-    """CTSDGTrainer"""
-
-    def __init__(self, train_one_step_g, train_one_step_d, cfg, finetune=False):
-        super(VAEGTrainer, self).__init__()
-        self.train_one_step_g = train_one_step_g
-        self.train_one_step_d = train_one_step_d
-        self.finetune = finetune
-        self.cfg = cfg
-
-    def run(self, x_gt, x_class, x_indiv_mels):
-        print("running train_one_step_g ...")
-        self.train_one_step_g.set_train(not self.finetune)
-        loss_g, output = self.train_one_step_g(x_gt, x_class, x_indiv_mels)
-
-        print("running train_one_step_d ...")
-        self.train_one_step_d.set_train()
-        loss_d = self.train_one_step_d(x_gt, output)
-        return loss_g, loss_d
-
-    def train(self, total_steps, dataset, callbacks, save_ckpt_logs=True, **kwargs):
-        # callbacks = get_callbacks(
-        #     self.cfg,
-        #     self.train_one_step_g.network.generator,
-        #     self.train_one_step_g.network.discriminator,
-        #     self.finetune,
-        # )
-        print(f"Start training for {total_steps} iterations")
-
-        dataset_size = dataset.get_dataset_size()
-        repeats_num = (total_steps + dataset_size - 1) // dataset_size
-        dataset = dataset.repeat(repeats_num)
-        dataloader = dataset.create_dict_iterator()
-        for num_batch, sample in enumerate(dataloader):
-            if num_batch >= total_steps:
-                print("Reached the target number of iterations")
-                break
-
-            x_gt = sample["data"]["gt"]
-            x_class = sample["data"]["class"]
-            x_indiv_mels = sample["data"]["indiv_mels"]
-
-            loss_g, loss_d = self.run(x_gt, x_class, x_indiv_mels)
-
-            print(loss_g)
-            print(loss_d)
-
-            # if save_ckpt_logs:
-            #     callbacks([loss_g.asnumpy().mean(), loss_d.asnumpy().mean()])
-
-        print("Training completed")
-
-
 class GWithLossCell(nn.Cell):
     """Generator with loss cell"""
 
@@ -208,3 +155,56 @@ class DWithLossCell(nn.Cell):
             fake_pred, fake_target
         )
         return loss_adversarial
+
+
+class VAEGTrainer:
+    """VAEGTrainer"""
+
+    def __init__(self, train_one_step_g, train_one_step_d, cfg, finetune=False):
+        super(VAEGTrainer, self).__init__()
+        self.train_one_step_g = train_one_step_g
+        self.train_one_step_d = train_one_step_d
+        self.finetune = finetune
+        self.cfg = cfg
+
+    def run(self, x_gt, x_class, x_indiv_mels):
+        print("running train_one_step_g ...")
+        self.train_one_step_g.set_train(not self.finetune)
+        loss_g, output = self.train_one_step_g(x_gt, x_class, x_indiv_mels)
+
+        print("running train_one_step_d ...")
+        self.train_one_step_d.set_train()
+        loss_d = self.train_one_step_d(x_gt, output)
+        return loss_g, loss_d
+
+    def train(self, total_steps, dataset, callbacks, save_ckpt_logs=True, **kwargs):
+        # callbacks = get_callbacks(
+        #     self.cfg,
+        #     self.train_one_step_g.network.generator,
+        #     self.train_one_step_g.network.discriminator,
+        #     self.finetune,
+        # )
+        print(f"Start training for {total_steps} iterations")
+
+        dataset_size = dataset.get_dataset_size()
+        repeats_num = (total_steps + dataset_size - 1) // dataset_size
+        dataset = dataset.repeat(repeats_num)
+        dataloader = dataset.create_dict_iterator()
+        for num_batch, sample in enumerate(dataloader):
+            if num_batch >= total_steps:
+                print("Reached the target number of iterations")
+                break
+
+            x_gt = sample["data"]["gt"]
+            x_class = sample["data"]["class"]
+            x_indiv_mels = sample["data"]["indiv_mels"]
+
+            loss_g, loss_d = self.run(x_gt, x_class, x_indiv_mels)
+
+            print(loss_g)
+            print(loss_d)
+
+            # if save_ckpt_logs:
+            #     callbacks([loss_g.asnumpy().mean(), loss_d.asnumpy().mean()])
+
+        print("Training completed")

@@ -29,7 +29,7 @@ from datasets.dataset_pvae import TrainPVAEDataset
 from models.audio2pose.audio2pose import Audio2Pose
 from argparse import ArgumentParser
 from utils.callbacks import EvalSaveCallback
-from trainer import (
+from models.audio2pose.trainer import (
     GWithLossCell,
     DWithLossCell,
     GTrainOneStepCell,

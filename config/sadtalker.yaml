@@ -107,3 +107,6 @@ facerender:
         layer: 3
         num_kp: 15
         num_bins: 66
+
+  train:
+    pretrained_vgg: False
