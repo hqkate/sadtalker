@@ -250,7 +250,6 @@ class AnimateModel(nn.Cell):
             **config.model_params.common_params,
         )
         self.mapping = MappingNet(**config.model_params.mapping_params)
-        self.he_estimator = None
 
         self.zeros_mat = ops.zeros((2, 1), dtype=ms.float32)
         self.ones_mat = ops.ones((2, 1), dtype=ms.float32)
@@ -271,7 +270,9 @@ class AnimateModel(nn.Cell):
         # keypoint rotation
         # kp_rotated = ms.Tensor(np.einsum("bmp,bkp->bkm", rot_mat.asnumpy(), kp.asnumpy()))
         rot_mat = ops.Cast()(rot_mat, ms.float32)
-        kp_rotated = ops.BatchMatMul(transpose_b=True)(rot_mat, kp_value).transpose(0, 2, 1)
+        kp_rotated = ops.BatchMatMul(transpose_b=True)(rot_mat, kp_value).transpose(
+            0, 2, 1
+        )
 
         # keypoint translation
         t[:, 0] = t[:, 0] * 0.0
@@ -293,7 +294,6 @@ class AnimateModel(nn.Cell):
         return degree
 
     def get_rotation_matrix(self, yaw, pitch, roll):
-
         yaw = yaw / 180.0 * 3.14
         pitch = pitch / 180.0 * 3.14
         roll = roll / 180.0 * 3.14
@@ -360,12 +360,12 @@ class AnimateModel(nn.Cell):
 
     def construct(self, source_image, source_semantics, target_semantics):
 
-        kp_canonical = self.kp_extractor(source_image) # value
-        he_source = self.mapping(source_semantics) # (yaw, pitch, roll, t, exp)
+        kp_canonical = self.kp_extractor(source_image)  # value
+        he_source = self.mapping(source_semantics)  # (yaw, pitch, roll, t, exp)
         kp_source = self.keypoint_transformation_train(kp_canonical, he_source)
         he_driving = self.mapping(target_semantics)
         kp_driving = self.keypoint_transformation_train(kp_canonical, he_driving)
 
         out = self.generator(source_image, kp_source=kp_source, kp_driving=kp_driving)
 
-        return out
+        return out, kp_canonical, kp_driving, he_source

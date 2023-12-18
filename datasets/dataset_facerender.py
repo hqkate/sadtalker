@@ -92,6 +92,9 @@ class TestFaceRenderDataset:
         self.semantic_radius = semantic_radius
 
     def prepare_source_features(self, pic_path, first_coeff_path, is_train=False):
+        """prepare the source image features
+        Take the 1st image in the video if it is training.
+        """
         img1 = Image.open(pic_path)
         source_image = np.array(img1)
         source_image = img_as_float32(source_image)
@@ -123,6 +126,8 @@ class TestFaceRenderDataset:
         return source_image_ts, source_semantics, source_semantics_ts
 
     def prepare_target_features(self, coeff_path, source_semantics, frame_idx=None, tgt_img_path=None):
+        """prepare the driving audio features
+        """
         txt_path = os.path.splitext(coeff_path)[0]
 
         generated_dict = scio.loadmat(coeff_path)
@@ -154,7 +159,7 @@ class TestFaceRenderDataset:
         target_semantics_list = []
         frame_num = generated_3dmm.shape[0]
 
-        if frame_idx is None:
+        if frame_idx is None: # test
             for frame_idx in range(frame_num):
                 target_semantics = transform_semantic_target(
                     generated_3dmm, frame_idx, self.semantic_radius
@@ -178,7 +183,7 @@ class TestFaceRenderDataset:
             target_semantics_np = np.asarray(target_semantics_np).astype("float32")
             target_semantics_ts = ms.Tensor(target_semantics_np)
 
-        else:
+        else: # train
             target_semantics = transform_semantic_target(
                 generated_3dmm, frame_idx, self.semantic_radius
             )
@@ -186,7 +191,7 @@ class TestFaceRenderDataset:
             target_semantics_np = np.asarray(target_semantics_np).astype("float32")
             target_semantics_ts = ms.Tensor(target_semantics_np)
 
-        if tgt_img_path is not None:
+        if tgt_img_path is not None: # train
             tgt_img = Image.open(tgt_img_path)
             target_image = np.array(tgt_img)
             target_image = img_as_float32(target_image)
@@ -194,7 +199,7 @@ class TestFaceRenderDataset:
             target_image = target_image.transpose((2, 0, 1))
             target_image_ts = ms.Tensor(target_image)
 
-        else:
+        else: # test
             target_image_ts = None
 
         return frame_num, target_semantics_ts, target_image_ts

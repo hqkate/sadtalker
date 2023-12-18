@@ -85,15 +85,10 @@ class KPDetector(nn.Cell):
         """
         Extract the mean from a heatmap
         """
-
-        assert heatmap.dtype == ms.float32, "heatmap is not fp32!"
-
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
         grid = make_coordinate_grid(shape[2:], heatmap.dtype).unsqueeze(0).unsqueeze(0)
         value = heatmap.mul(grid).sum(axis=(2, 3, 4))
-
-        assert value.dtype == ms.float32, "ops.mul can't keep the same datatype!"
 
         return value
 

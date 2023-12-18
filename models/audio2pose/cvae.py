@@ -63,7 +63,7 @@ class Encoder(nn.Cell):
         self.linear_logvar = nn.Dense(layer_sizes[-1], latent_size)
         self.linear_audio = nn.Dense(audio_emb_in_size, audio_emb_out_size)
 
-        self.classbias = ms.Tensor(np.random.randn(self.num_classes, latent_size).astype(np.float16))
+        self.classbias = ms.Tensor(np.random.randn(self.num_classes, latent_size).astype(np.float32))
 
     def construct(self, batch):
 

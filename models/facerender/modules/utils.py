@@ -31,6 +31,25 @@ def kp2gaussian(mean, spatial_size, kp_variance):
     return out
 
 
+def make_coordinate_grid_2d(spatial_size, type):
+    """
+    Create a meshgrid [-1,1] x [-1,1] of given spatial_size.
+    """
+    h, w = spatial_size
+    x = ops.arange(w).astype(type)
+    y = ops.arange(h).astype(type)
+
+    x = (2.0 * (x / (w - 1.0)) - 1.0)
+    y = (2.0 * (y / (h - 1.0)) - 1.0)
+
+    yy = y.view(-1, 1).repeat(w, axis=1)
+    xx = x.view(1, -1).repeat(h, axis=0)
+
+    meshed = ops.cat([xx.unsqueeze(2), yy.unsqueeze(2)], 2).astype(type)
+
+    return meshed
+
+
 def make_coordinate_grid(spatial_size, type):
     d, h, w = spatial_size
 

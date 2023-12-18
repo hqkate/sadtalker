@@ -96,7 +96,7 @@ class DTrainOneStepCell(TrainOneStepCell):
 class GWithLossCell(nn.Cell):
     """Generator with loss cell"""
 
-    def __init__(self, generator, discriminator, cfg):
+    def __init__(self, generator, discriminator):
         super().__init__()
         self.generator = generator
         self.discriminator = discriminator
@@ -160,12 +160,11 @@ class DWithLossCell(nn.Cell):
 class VAEGTrainer:
     """VAEGTrainer"""
 
-    def __init__(self, train_one_step_g, train_one_step_d, cfg, finetune=False):
+    def __init__(self, train_one_step_g, train_one_step_d, finetune=False):
         super(VAEGTrainer, self).__init__()
         self.train_one_step_g = train_one_step_g
         self.train_one_step_d = train_one_step_d
         self.finetune = finetune
-        self.cfg = cfg
 
     def run(self, x_gt, x_class, x_indiv_mels):
         print("running train_one_step_g ...")

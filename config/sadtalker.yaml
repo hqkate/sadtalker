@@ -110,3 +110,7 @@ facerender:
 
   train:
     pretrained_vgg: False
+    transform_params:
+      sigma_affine: 0.05
+      sigma_tps: 0.005
+      points_tps: 5

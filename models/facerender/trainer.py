@@ -17,18 +17,85 @@
 
 from mindspore import Parameter, Tensor, context
 from mindspore import dtype as mstype
-from mindspore import nn, ops
+from mindspore import nn, ops, Tensor
 from mindspore.communication.management import get_group_size
 from mindspore.context import ParallelMode
 from mindspore.parallel._auto_parallel_context import auto_parallel_context
 
-from losses.perceptual import PerceptualLoss
+from models.facerender.modules.utils import make_coordinate_grid_2d
+from models.face3d.facexlib.resnet import Bottleneck
+from models.facerender.networks import Hopenet
+from models.facerender.modules.make_animation import headpose_pred_to_degree
+from utils.preprocess import CropAndExtract
 
 
-def init_perceptual_loss():
-    layers = ["relu_1_1", "relu_2_1", "relu_3_1", "relu_4_1", "relu_5_1"]
-    weights = [0.03125, 0.0625, 0.125, 0.25, 1.0]
-    return PerceptualLoss(layers=layers, num_scales=3, weights=weights)
+def apply_image_normalization(input):
+    r"""Normalize using ImageNet mean and std.
+
+    Args:
+        input (4D tensor NxCxHxW): The input images, assuming to be [-1, 1].
+
+    Returns:
+        Normalized inputs using the ImageNet normalization.
+    """
+    # normalize the input back to [0, 1]
+    normalized_input = (input + 1) / 2
+    # normalize the input using the ImageNet mean and std
+    mean = Tensor([0.485, 0.456, 0.406], dtype=normalized_input.dtype).view(1, 3, 1, 1)
+    std = Tensor([0.229, 0.224, 0.225], dtype=normalized_input.dtype).view(1, 3, 1, 1)
+    output = (normalized_input - mean) / std
+    return output
+
+
+class Transform:
+    """
+    Random tps transformation for equivariance constraints.
+    """
+    def __init__(self, bs, **kwargs):
+        noise = ops.normal(shape=(bs, 2, 3), mean=0, stddev=kwargs['sigma_affine'])
+        self.theta = noise + ops.eye(2, 3).view(1, 2, 3)
+        self.bs = bs
+
+        if ('sigma_tps' in kwargs) and ('points_tps' in kwargs):
+            self.tps = True
+            self.control_points = make_coordinate_grid_2d((kwargs['points_tps'], kwargs['points_tps']), type=noise.dtype)
+            self.control_points = self.control_points.unsqueeze(0)
+            self.control_params = ops.normal(shape=(bs, 1, kwargs['points_tps'] ** 2), mean=0, stddev=kwargs['sigma_tps'])
+        else:
+            self.tps = False
+
+    def transform_frame(self, frame):
+        grid = make_coordinate_grid_2d(frame.shape[2:], type=frame.dtype).unsqueeze(0)
+        grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
+        grid = self.warp_coordinates(grid).view(self.bs, frame.shape[2], frame.shape[3], 2)
+        return ops.grid_sample(frame, grid, padding_mode="reflection")
+
+    def warp_coordinates(self, coordinates):
+        theta = self.theta.astype(coordinates.dtype)
+        theta = theta.unsqueeze(1)
+        transformed = ops.matmul(theta[:, :, :, :2], coordinates.unsqueeze(-1)) + theta[:, :, :, 2:]
+        transformed = transformed.squeeze(-1)
+
+        if self.tps:
+            control_points = self.control_points.astype(coordinates.dtype)
+            control_params = self.control_params.astype(coordinates.dtype)
+            distances = coordinates.view(coordinates.shape[0], -1, 1, 2) - control_points.view(1, 1, -1, 2)
+            distances = ops.abs(distances).sum(-1)
+
+            result = distances ** 2
+            result = result * ops.log(distances + 1e-6)
+            result = result * control_params
+            result = result.sum(axis=2).view(self.bs, coordinates.shape[1], 1)
+            transformed = transformed + result
+
+        return transformed
+
+    def jacobian(self, coordinates):
+        new_coordinates = self.warp_coordinates(coordinates)
+        grad_x = ops.grad(new_coordinates[..., 0].sum(), coordinates, create_graph=True)
+        grad_y = ops.grad(new_coordinates[..., 1].sum(), coordinates, create_graph=True)
+        jacobian = ops.cat([grad_x[0].unsqueeze(-2), grad_y[0].unsqueeze(-2)], axis=-2)
+        return jacobian
 
 
 class TrainOneStepCell(nn.Cell):
@@ -109,31 +176,48 @@ class GWithLossCell(nn.Cell):
         self.generator = generator
         self.discriminator = discriminator
         self.vgg_feat_extractor = vgg_feat_extractor
-
-        # Perceptual loss
-
-        self.pctloss = init_perceptual_loss()
+        self.cfg = cfg
 
         # Equivariance loss
+        self.extractor = CropAndExtract(self.cfg.preprocess)
+
         # Keypoint prior loss
+        self.dt = 0.1  # distance threshold
+        self.zt = 0.33  # target value
+
         # Head pose loss
+        self.resize_mode = "bilinear"
+        self.hopenet = Hopenet(Bottleneck, [3, 4, 6, 3], 66)  # TODO: load pretrained!
+        self.hopenet.set_train(False)
+
         # Deformation prior loss
+
+        # Perceptual loss
+        self.l1 = nn.L1Loss()
+        self.pct_weights = [0.03125, 0.0625, 0.125, 0.25, 1.0]
 
         # GAN loss
         self.criterion = nn.BCEWithLogitsLoss(reduction="mean")
         self.real_target = Tensor(1.0, mstype.float32)
 
-        self.mse = nn.MSELoss()
-
-    def construct(self, source_image, source_semantics, target_semantics, target_image_ts):
-        pred_semantics = self.generator(source_image, source_semantics, target_semantics)
+    def construct(
+        self, source_image, source_semantics, target_semantics, target_image_ts, transformed_frame
+    ):
+        pred_semantics, kp_canonical, kp_driving, he_source = self.generator(
+            source_image, source_semantics, target_semantics
+        )
 
         logits = pred_semantics
         labels = target_image_ts
 
-        # loss_pct = self.pctloss(logits, labels)
-        loss_mse = self.mse(logits, labels)
+        # perceptual loss
+        vgg_output = self.vgg_feat_extractor(logits)
+        vgg_ground_truth = self.vgg_feat_extractor(labels)
+        loss_perceptual = 0.0
+        for i, w in enumerate(self.pct_weights):
+            loss_perceptual += w * self.l1(vgg_output[i], vgg_ground_truth[i])
 
+        # GAN loss
         output_pred = self.discriminator(logits)
 
         real_target = self.real_target.expand_as(output_pred)
@@ -142,7 +226,76 @@ class GWithLossCell(nn.Cell):
 
         loss_adversarial = self.criterion(output_pred, real_target)
 
-        loss_g = loss_adversarial + loss_mse
+        # Equivariance loss
+        transform = Transform(
+            source_image.shape[0], **self.cfg.facerender.train.transform_params
+        )
+
+        transformed_frame = transform.transform_frame(source_image)
+        transformed_semantics = self.extractor(transformed_frame) # TODO!!!!
+
+        transformed_he_source = self.generator.mapping(transformed_semantics)
+
+        transformed_kp = self.generator.keypoint_transformation_train(
+            kp_canonical, transformed_he_source
+        )
+
+        ## Value loss part
+        # project 3d -> 2d
+        kp_driving_2d = kp_driving[:, :, :2]
+        transformed_kp_2d = transformed_kp[:, :, :2]
+        loss_eqv = ops.abs(
+            kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)
+        ).mean()
+
+        # Keypoint prior loss
+        loss_kp = 0.0
+        for i in range(kp_driving.shape[1]):
+            for j in range(kp_driving.shape[1]):
+                dist = ops.dist(kp_driving[:, i, :], kp_driving[:, j, :], p=2) ** 2
+                dist = self.dt - dist  # set Dt = 0.1
+                dd = ops.gt(dist, 0)
+                value = (dist * dd).mean()
+                loss_kp += value
+
+        kp_mean_depth = kp_driving[:, :, -1].mean(-1)
+        value_depth = ops.abs(kp_mean_depth - self.zt).mean()  # set Zt = 0.33
+
+        loss_kp += value_depth
+
+        # Headpose loss
+        source_224 = ops.interpolate(
+            source_image, mode=self.resize_mode, size=(224, 224), align_corners=False
+        )
+        source_224 = apply_image_normalization(source_224)
+
+        yaw_gt, pitch_gt, roll_gt = self.hopenet(source_224)
+        yaw_gt = headpose_pred_to_degree(yaw_gt)
+        pitch_gt = headpose_pred_to_degree(pitch_gt)
+        roll_gt = headpose_pred_to_degree(roll_gt)
+
+        yaw, pitch, roll = he_source[0], he_source[1], he_source[2]
+        yaw = headpose_pred_to_degree(yaw)
+        pitch = headpose_pred_to_degree(pitch)
+        roll = headpose_pred_to_degree(roll)
+
+        loss_headpose = (
+            ops.abs(yaw - yaw_gt).mean()
+            + ops.abs(pitch - pitch_gt).mean()
+            + ops.abs(roll - roll_gt).mean()
+        )
+
+        # Deformation prior loss
+        loss_deform = 0.0
+
+        loss_g = (
+            1.0 * loss_adversarial
+            + 10.0 * loss_perceptual
+            + 20.0 * loss_eqv
+            + 10.0 * loss_kp
+            + 20.0 * loss_headpose
+            + 5.0 * loss_deform
+        )
 
         result = ops.stop_gradient(logits)
         return loss_g, result
@@ -182,7 +335,6 @@ class FaceRenderTrainer:
         self.cfg = cfg
 
     def run(self, data_batch):
-
         source_image = data_batch["source_image"]
         source_semantics = data_batch["source_semantics"]
         target_semantics = data_batch["target_semantics"]
@@ -190,7 +342,9 @@ class FaceRenderTrainer:
 
         print("running train_one_step_g ...")
         self.train_one_step_g.set_train(not self.finetune)
-        loss_g, output = self.train_one_step_g(source_image, source_semantics, target_semantics, target_image_ts)
+        loss_g, output = self.train_one_step_g(
+            source_image, source_semantics, target_semantics, target_image_ts
+        )
 
         print("running train_one_step_d ...")
         self.train_one_step_d.set_train()

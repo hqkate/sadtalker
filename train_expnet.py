@@ -59,7 +59,7 @@ def init_path(
 
 
 def main(args):
-    context.set_context(mode=context.PYNATIVE_MODE, device_target="CPU", device_id=7)
+    context.set_context(mode=context.GRAPH_MODE, device_target="Ascend", device_id=7)
     # context.set_context(mode=context.GRAPH_MODE,
     #                     device_target="CPU", device_id=7)
 

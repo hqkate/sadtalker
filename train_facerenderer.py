@@ -24,7 +24,10 @@ from models.facerender.trainer import (
     DTrainOneStepCell,
 )
 
-def facerender_trainer(generator, discriminator, vgg_feat_extractor, optimizer_G, optimizer_D, cfg):
+
+def facerender_trainer(
+    generator, discriminator, vgg_feat_extractor, optimizer_G, optimizer_D, cfg
+):
     is_train_finetune = False
 
     generator_w_loss = GWithLossCell(generator, discriminator, vgg_feat_extractor, cfg)
@@ -39,7 +42,9 @@ def facerender_trainer(generator, discriminator, vgg_feat_extractor, optimizer_G
 
 
 def train(args, config):
-    context.set_context(mode=context.GRAPH_MODE, device_target="CPU", device_id=args.device_id)
+    context.set_context(
+        mode=context.PYNATIVE_MODE, device_target="CPU", device_id=args.device_id
+    )
 
     save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))
     os.makedirs(save_dir, exist_ok=True)
@@ -71,10 +76,6 @@ def train(args, config):
 
     dataloader = ds.batch(args.batch_size, drop_remainder=True)
 
-    # for databatch in dataloader:
-    #     result = animate_model(databatch) # [2, 3, 256, 256]
-    #     print(result)
-
     # lr scheduler
     min_lr = 0.0
     max_lr = 0.0005
@@ -101,7 +102,14 @@ def train(args, config):
 
     # define trainer
     vgg_feat_extractor = get_feature_extractor(config.facerender)
-    trainer = facerender_trainer(animate_model, discriminator, vgg_feat_extractor, optimizer_G, optimizer_D, config)
+    trainer = facerender_trainer(
+        animate_model,
+        discriminator,
+        vgg_feat_extractor,
+        optimizer_G,
+        optimizer_D,
+        config,
+    )
     initial_epoch = 0
     print(" training...")
     trainer.train(

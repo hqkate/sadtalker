@@ -95,5 +95,7 @@ def get_feature_extractor(cfg):
     """get feature extractor"""
     vgg_feat_extractor = VGG19FeatureExtractor()
     if cfg.train.pretrained_vgg:
-        load_param_into_net(vgg_feat_extractor, load_checkpoint(cfg.train.pretrained_vgg))
+        load_param_into_net(
+            vgg_feat_extractor, load_checkpoint(cfg.train.pretrained_vgg)
+        )
     return vgg_feat_extractor
