@@ -368,4 +368,4 @@ class AnimateModel(nn.Cell):
 
         out = self.generator(source_image, kp_source=kp_source, kp_driving=kp_driving)
 
-        return out, kp_canonical, kp_driving, he_source
+        return out, kp_canonical, kp_source, kp_driving, he_source, he_driving

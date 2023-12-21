@@ -66,6 +66,70 @@ class CropAndExtract:
 
         self.lm3d_std = load_lm3d(path_bfm)
 
+    def extract_3dmm(self, imgs, landmarks_path=None, x_full_frames=None):
+        """
+        args:
+            imgs: List[PIL.Image] (raw_H, raw_W, 3)
+        """
+        if (landmarks_path is None) or (not os.path.isfile(landmarks_path)):
+            lm = self.propress.predictor.extract_keypoint(imgs, landmarks_path)
+        else:
+            print(" Using saved landmarks.")
+            lm = np.loadtxt(landmarks_path).astype(np.float32)
+            lm = lm.reshape([len(x_full_frames), -1, 2])
+
+        # 2. get the landmark according to the detected face.
+        # load 3dmm paramter generator from Deep3DFaceRecon_pytorch
+        video_coeffs, full_coeffs = [], []
+        for idx in tqdm(range(len(imgs)), desc="3DMM Extraction In Video:"):
+            frame = imgs[idx]
+
+            if not isinstance(frame, Image.Image):
+                frame = Image.fromarray(np.uint8(frame)).convert('RGB')
+
+            W, H = frame.size
+
+            lm1 = lm[idx].reshape([-1, 2])
+
+            if np.mean(lm1) == -1:
+                lm1 = (self.lm3d_std[:, :2] + 1) / 2.0
+                lm1 = np.concatenate([lm1[:, :1] * W, lm1[:, 1:2] * H], 1)
+            else:
+                lm1[:, -1] = H - 1 - lm1[:, -1]
+
+            trans_params, im1, lm1, _ = align_img(frame, lm1, self.lm3d_std)
+
+            trans_params = np.array(
+                [float(item) for item in np.hsplit(trans_params, 5)]
+            ).astype(np.float32)
+            im_t = (
+                ms.Tensor(np.array(im1) / 255.0, dtype=ms.float32)
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+            )
+
+            full_coeff = self.net_recon(im_t)
+            coeffs = split_coeff(full_coeff)
+
+            pred_coeff = [coef.asnumpy() for coef in coeffs]
+            # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
+
+            pred_coeff = np.concatenate(
+                [
+                    pred_coeff[1],
+                    pred_coeff[3],
+                    pred_coeff[5],
+                    trans_params[2:][None],
+                ],
+                1,
+            )
+            video_coeffs.append(pred_coeff)
+            full_coeffs.append(full_coeff.asnumpy())
+
+        semantic_npy = np.array(video_coeffs)[:, 0]
+
+        return {"coeff_3dmm": semantic_npy, "full_3dmm": np.array(full_coeffs)[0]}
+
     def generate(
         self,
         input_path,
@@ -155,62 +219,12 @@ class CropAndExtract:
 
         print(f"finished cropping the image and saved to file {png_path}.")
 
-        # 2. get the landmark according to the detected face.
-        if not os.path.isfile(landmarks_path):
-            lm = self.propress.predictor.extract_keypoint(frames_pil, landmarks_path)
-        else:
-            print(" Using saved landmarks.")
-            lm = np.loadtxt(landmarks_path).astype(np.float32)
-            lm = lm.reshape([len(x_full_frames), -1, 2])
-
         if not os.path.isfile(coeff_path):
-            # load 3dmm paramter generator from Deep3DFaceRecon_pytorch
-            video_coeffs, full_coeffs = [], []
-            for idx in tqdm(range(len(frames_pil)), desc="3DMM Extraction In Video:"):
-                frame = frames_pil[idx]
-                W, H = frame.size
-                lm1 = lm[idx].reshape([-1, 2])
-
-                if np.mean(lm1) == -1:
-                    lm1 = (self.lm3d_std[:, :2] + 1) / 2.0
-                    lm1 = np.concatenate([lm1[:, :1] * W, lm1[:, 1:2] * H], 1)
-                else:
-                    lm1[:, -1] = H - 1 - lm1[:, -1]
-
-                trans_params, im1, lm1, _ = align_img(frame, lm1, self.lm3d_std)
-
-                trans_params = np.array(
-                    [float(item) for item in np.hsplit(trans_params, 5)]
-                ).astype(np.float32)
-                im_t = (
-                    ms.Tensor(np.array(im1) / 255.0, dtype=ms.float32)
-                    .permute(2, 0, 1)
-                    .unsqueeze(0)
-                )
-
-                full_coeff = self.net_recon(im_t)
-                coeffs = split_coeff(full_coeff)
-
-                pred_coeff = [coef.asnumpy() for coef in coeffs]
-                # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
-
-                pred_coeff = np.concatenate(
-                    [
-                        pred_coeff[1],
-                        pred_coeff[3],
-                        pred_coeff[5],
-                        trans_params[2:][None],
-                    ],
-                    1,
-                )
-                video_coeffs.append(pred_coeff)
-                full_coeffs.append(full_coeff.asnumpy())
-
-            semantic_npy = np.array(video_coeffs)[:, 0]
+            mats_3dmm = self.extract_3dmm(frames_pil, landmarks_path, x_full_frames)
 
             savemat(
                 coeff_path,
-                {"coeff_3dmm": semantic_npy, "full_3dmm": np.array(full_coeffs)[0]},
+                mats_3dmm,
             )
 
         return coeff_path, png_path, crop_info
@@ -236,8 +250,6 @@ class CropAndExtract:
         img_path = save_path.replace("/pose/", "/images/")  # 最终的图像保存路径
         os.makedirs(img_path, exist_ok=True)  # 图像保存路径
         # info_path =  os.path.join(save_path, 'crop_info.mat')
-
-        import pdb; pdb.set_trace()
 
         coeff_path = os.path.join(save_path, video_name + ".mat")
 
@@ -310,63 +322,12 @@ class CropAndExtract:
             )  # 保存crop的图像
             i += 1
 
-        import pdb; pdb.set_trace()
-
-        # 2. get the landmark according to the detected face.
-        if not os.path.isfile(landmarks_path):
-            lm = self.propress.predictor.extract_keypoint(frames_pil, landmarks_path)
-        else:
-            print(" Using saved landmarks.")
-            lm = np.loadtxt(landmarks_path).astype(np.float32)
-            lm = lm.reshape([len(x_full_frames), -1, 2])
-
         if not os.path.isfile(coeff_path):
-            # load 3dmm paramter generator from Deep3DFaceRecon_pytorch
-            video_coeffs, full_coeffs = [], []
-            for idx in tqdm(range(len(frames_pil)), desc="3DMM Extraction In Video:"):
-                frame = frames_pil[idx]
-                W, H = frame.size
-                lm1 = lm[idx].reshape([-1, 2])
-
-                if np.mean(lm1) == -1:
-                    lm1 = (self.lm3d_std[:, :2] + 1) / 2.0
-                    lm1 = np.concatenate([lm1[:, :1] * W, lm1[:, 1:2] * H], 1)
-                else:
-                    lm1[:, -1] = H - 1 - lm1[:, -1]
-
-                trans_params, im1, lm1, _ = align_img(frame, lm1, self.lm3d_std)
-
-                trans_params = np.array(
-                    [float(item) for item in np.hsplit(trans_params, 5)]
-                ).astype(np.float32)
-                im_t = (
-                    ms.tensor(np.array(im1) / 255.0, dtype=ms.float32)
-                    .permute(2, 0, 1)
-                    .unsqueeze(0)
-                )
-
-                full_coeff = self.net_recon(im_t)  # 1 257
-                coeffs = split_coeff(full_coeff, return_dict=True)
-
-                pred_coeff = {key: coeffs[key].asnumpy() for key in coeffs}
-
-                pred_coeff = np.concatenate(
-                    [
-                        pred_coeff["exp"],
-                        pred_coeff["angle"],
-                        pred_coeff["trans"],
-                        trans_params[2:][None],  # 仿射变换参数
-                    ],
-                    1,
-                )  # (1, 73)
-                video_coeffs.append(pred_coeff)
-                full_coeffs.append(full_coeff.asnumpy())
-
-            semantic_npy = np.array(video_coeffs)[:, 0]
+            mats_3dmm = self.extract_3dmm(frames_pil, landmarks_path, x_full_frames)
 
             savemat(
                 coeff_path,
-                {"coeff_3dmm": semantic_npy, "full_3dmm": np.array(full_coeffs)[0]},
+                mats_3dmm,
             )
 
     # 检测landmark

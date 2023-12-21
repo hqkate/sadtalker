@@ -111,10 +111,6 @@ if __name__ == "__main__":
     futures = [p.submit(mp_handler, j) for j in jobs]
     _ = [r.result() for r in tqdm(as_completed(futures), total=len(futures))]
 
-    import pdb
-
-    pdb.set_trace()
-
     # step3: audio2coeff
     audio_to_coeff = Audio2Coeff(config)
     fa_audio2coeff = [audio_to_coeff for _ in range(ngpu)]  # 构建GPU

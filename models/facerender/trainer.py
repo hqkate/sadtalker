@@ -15,6 +15,10 @@
 
 """trainer"""
 
+import os
+import numpy as np
+import mindspore as ms
+
 from mindspore import Parameter, Tensor, context
 from mindspore import dtype as mstype
 from mindspore import nn, ops, Tensor
@@ -22,10 +26,11 @@ from mindspore.communication.management import get_group_size
 from mindspore.context import ParallelMode
 from mindspore.parallel._auto_parallel_context import auto_parallel_context
 
+from models.facerender.modules.keypoint_detector import HEEstimator
 from models.facerender.modules.utils import make_coordinate_grid_2d
+from models.facerender.modules.make_animation import headpose_pred_to_degree
 from models.face3d.facexlib.resnet import Bottleneck
 from models.facerender.networks import Hopenet
-from models.facerender.modules.make_animation import headpose_pred_to_degree
 from utils.preprocess import CropAndExtract
 
 
@@ -51,38 +56,52 @@ class Transform:
     """
     Random tps transformation for equivariance constraints.
     """
+
     def __init__(self, bs, **kwargs):
-        noise = ops.normal(shape=(bs, 2, 3), mean=0, stddev=kwargs['sigma_affine'])
+        noise = ops.normal(shape=(bs, 2, 3), mean=0, stddev=kwargs["sigma_affine"])
         self.theta = noise + ops.eye(2, 3).view(1, 2, 3)
         self.bs = bs
 
-        if ('sigma_tps' in kwargs) and ('points_tps' in kwargs):
+        if ("sigma_tps" in kwargs) and ("points_tps" in kwargs):
             self.tps = True
-            self.control_points = make_coordinate_grid_2d((kwargs['points_tps'], kwargs['points_tps']), type=noise.dtype)
+            self.control_points = make_coordinate_grid_2d(
+                (kwargs["points_tps"], kwargs["points_tps"]), type=noise.dtype
+            )
             self.control_points = self.control_points.unsqueeze(0)
-            self.control_params = ops.normal(shape=(bs, 1, kwargs['points_tps'] ** 2), mean=0, stddev=kwargs['sigma_tps'])
+            self.control_params = ops.normal(
+                shape=(bs, 1, kwargs["points_tps"] ** 2),
+                mean=0,
+                stddev=kwargs["sigma_tps"],
+            )
         else:
             self.tps = False
 
     def transform_frame(self, frame):
         grid = make_coordinate_grid_2d(frame.shape[2:], type=frame.dtype).unsqueeze(0)
         grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
-        grid = self.warp_coordinates(grid).view(self.bs, frame.shape[2], frame.shape[3], 2)
+        grid = self.warp_coordinates(grid).view(
+            self.bs, frame.shape[2], frame.shape[3], 2
+        )
         return ops.grid_sample(frame, grid, padding_mode="reflection")
 
     def warp_coordinates(self, coordinates):
         theta = self.theta.astype(coordinates.dtype)
         theta = theta.unsqueeze(1)
-        transformed = ops.matmul(theta[:, :, :, :2], coordinates.unsqueeze(-1)) + theta[:, :, :, 2:]
+        transformed = (
+            ops.matmul(theta[:, :, :, :2], coordinates.unsqueeze(-1))
+            + theta[:, :, :, 2:]
+        )
         transformed = transformed.squeeze(-1)
 
         if self.tps:
             control_points = self.control_points.astype(coordinates.dtype)
             control_params = self.control_params.astype(coordinates.dtype)
-            distances = coordinates.view(coordinates.shape[0], -1, 1, 2) - control_points.view(1, 1, -1, 2)
+            distances = coordinates.view(
+                coordinates.shape[0], -1, 1, 2
+            ) - control_points.view(1, 1, -1, 2)
             distances = ops.abs(distances).sum(-1)
 
-            result = distances ** 2
+            result = distances**2
             result = result * ops.log(distances + 1e-6)
             result = result * control_params
             result = result.sum(axis=2).view(self.bs, coordinates.shape[1], 1)
@@ -179,6 +198,7 @@ class GWithLossCell(nn.Cell):
         self.cfg = cfg
 
         # Equivariance loss
+        self.semantic_radius = 13
         self.extractor = CropAndExtract(self.cfg.preprocess)
 
         # Keypoint prior loss
@@ -200,12 +220,34 @@ class GWithLossCell(nn.Cell):
         self.criterion = nn.BCEWithLogitsLoss(reduction="mean")
         self.real_target = Tensor(1.0, mstype.float32)
 
-    def construct(
-        self, source_image, source_semantics, target_semantics, target_image_ts, transformed_frame
-    ):
-        pred_semantics, kp_canonical, kp_driving, he_source = self.generator(
-            source_image, source_semantics, target_semantics
+        # Keypoint unsupervised loss
+        self.he_estimator = HEEstimator(
+            **cfg.facerender.model_params.he_estimator_params,
+            **cfg.facerender.model_params.common_params,
         )
+        he_estimator_path = os.path.join(
+            cfg.facerender.path.get("checkpoint_dir", ""), cfg.facerender.path.get("he_estimator_checkpoint", None)
+        )
+        estimator_params = ms.load_checkpoint(he_estimator_path)
+        ms.load_param_into_net(self.he_estimator, estimator_params)
+        self.he_estimator.set_train(False)
+
+    def construct(
+        self,
+        source_image,
+        source_semantics,
+        source_image_binary,
+        target_semantics,
+        target_image_ts,
+    ):
+        (
+            pred_semantics,
+            kp_canonical,
+            kp_source,
+            kp_driving,
+            he_source,
+            he_driving,
+        ) = self.generator(source_image, source_semantics, target_semantics)
 
         logits = pred_semantics
         labels = target_image_ts
@@ -217,7 +259,7 @@ class GWithLossCell(nn.Cell):
         for i, w in enumerate(self.pct_weights):
             loss_perceptual += w * self.l1(vgg_output[i], vgg_ground_truth[i])
 
-        # GAN loss
+        # GAN loss (+ feature matching)
         output_pred = self.discriminator(logits)
 
         real_target = self.real_target.expand_as(output_pred)
@@ -231,8 +273,17 @@ class GWithLossCell(nn.Cell):
             source_image.shape[0], **self.cfg.facerender.train.transform_params
         )
 
-        transformed_frame = transform.transform_frame(source_image)
-        transformed_semantics = self.extractor(transformed_frame) # TODO!!!!
+        transformed_frame = (
+            transform.transform_frame(source_image_binary.astype(mstype.float32))
+        )  # (bs, 256, 256, 3)
+        coeff_dict = self.extractor.extract_3dmm(list(ops.unbind(transformed_frame)))
+        transformed_semantics = coeff_dict["coeff_3dmm"][:, : source_semantics.shape[1]]
+        transformed_semantics = Tensor(transformed_semantics, mstype.float32).unsqueeze(
+            -1
+        )
+        transformed_semantics = transformed_semantics.repeat(
+            self.semantic_radius * 2 + 1, axis=-1
+        )
 
         transformed_he_source = self.generator.mapping(transformed_semantics)
 
@@ -242,11 +293,12 @@ class GWithLossCell(nn.Cell):
 
         ## Value loss part
         # project 3d -> 2d
-        kp_driving_2d = kp_driving[:, :, :2]
+        kp_source_2d = kp_source[:, :, :2]
         transformed_kp_2d = transformed_kp[:, :, :2]
         loss_eqv = ops.abs(
-            kp_driving_2d - transform.warp_coordinates(transformed_kp_2d)
+            kp_source_2d - transform.warp_coordinates(transformed_kp_2d)
         ).mean()
+        # loss_eqv = 0.0
 
         # Keypoint prior loss
         loss_kp = 0.0
@@ -286,15 +338,24 @@ class GWithLossCell(nn.Cell):
         )
 
         # Deformation prior loss
-        loss_deform = 0.0
+        exp_driving = he_driving[-1]
+        loss_deform = ops.norm(exp_driving, ord=1, dim=-1).mean()
+
+        # Keypoint unsupervised loss
+        he_source_vid2vid = self.he_estimator(source_image)
+        kp_vid2vid = self.generator.keypoint_transformation_train(
+            kp_canonical, he_source_vid2vid
+        )
+        loss_vid2vid = ops.abs(kp_vid2vid - kp_source).sum(axis=-1).mean()
 
         loss_g = (
             1.0 * loss_adversarial
             + 10.0 * loss_perceptual
-            + 20.0 * loss_eqv
+            + 20.0 * loss_eqv # TODO!!
             + 10.0 * loss_kp
             + 20.0 * loss_headpose
             + 5.0 * loss_deform
+            + 20.0 * loss_vid2vid
         )
 
         result = ops.stop_gradient(logits)
@@ -337,13 +398,18 @@ class FaceRenderTrainer:
     def run(self, data_batch):
         source_image = data_batch["source_image"]
         source_semantics = data_batch["source_semantics"]
+        source_image_binary = data_batch["source_image_binary"]
         target_semantics = data_batch["target_semantics"]
         target_image_ts = data_batch["target_image_ts"]
 
         print("running train_one_step_g ...")
         self.train_one_step_g.set_train(not self.finetune)
         loss_g, output = self.train_one_step_g(
-            source_image, source_semantics, target_semantics, target_image_ts
+            source_image,
+            source_semantics,
+            source_image_binary,
+            target_semantics,
+            target_image_ts,
         )
 
         print("running train_one_step_d ...")

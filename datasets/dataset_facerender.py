@@ -4,9 +4,12 @@ import numpy as np
 from PIL import Image
 from skimage import io, img_as_float32, transform
 import mindspore as ms
+from mindspore import ops
 import scipy.io as scio
 from utils.get_file import get_img_paths
 from glob import glob
+
+from models.facerender.modules.utils import make_coordinate_grid_2d
 
 
 def transform_semantic_1(semantic, semantic_radius):
@@ -64,10 +67,76 @@ def gen_camera_pose(camera_degree_list, frame_num, batch_size):
     return new_degree_np
 
 
+class Transform:
+    """
+    Random tps transformation for equivariance constraints.
+    """
+
+    def __init__(self, bs, **kwargs):
+        noise = ops.normal(shape=(bs, 2, 3), mean=0, stddev=kwargs["sigma_affine"])
+        self.theta = noise + ops.eye(2, 3).view(1, 2, 3)
+        self.bs = bs
+
+        if ("sigma_tps" in kwargs) and ("points_tps" in kwargs):
+            self.tps = True
+            self.control_points = make_coordinate_grid_2d(
+                (kwargs["points_tps"], kwargs["points_tps"]), type=noise.dtype
+            )
+            self.control_points = self.control_points.unsqueeze(0)
+            self.control_params = ops.normal(
+                shape=(bs, 1, kwargs["points_tps"] ** 2),
+                mean=0,
+                stddev=kwargs["sigma_tps"],
+            )
+        else:
+            self.tps = False
+
+    def transform_frame(self, frame):
+        grid = make_coordinate_grid_2d(frame.shape[2:], type=frame.dtype).unsqueeze(0)
+        grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
+        grid = self.warp_coordinates(grid).view(
+            self.bs, frame.shape[2], frame.shape[3], 2
+        )
+        return ops.grid_sample(frame, grid, padding_mode="reflection")
+
+    def warp_coordinates(self, coordinates):
+        theta = self.theta.astype(coordinates.dtype)
+        theta = theta.unsqueeze(1)
+        transformed = (
+            ops.matmul(theta[:, :, :, :2], coordinates.unsqueeze(-1))
+            + theta[:, :, :, 2:]
+        )
+        transformed = transformed.squeeze(-1)
+
+        if self.tps:
+            control_points = self.control_points.astype(coordinates.dtype)
+            control_params = self.control_params.astype(coordinates.dtype)
+            distances = coordinates.view(
+                coordinates.shape[0], -1, 1, 2
+            ) - control_points.view(1, 1, -1, 2)
+            distances = ops.abs(distances).sum(-1)
+
+            result = distances**2
+            result = result * ops.log(distances + 1e-6)
+            result = result * control_params
+            result = result.sum(axis=2).view(self.bs, coordinates.shape[1], 1)
+            transformed = transformed + result
+
+        return transformed
+
+    def jacobian(self, coordinates):
+        new_coordinates = self.warp_coordinates(coordinates)
+        grad_x = ops.grad(new_coordinates[..., 0].sum(), coordinates, create_graph=True)
+        grad_y = ops.grad(new_coordinates[..., 1].sum(), coordinates, create_graph=True)
+        jacobian = ops.cat([grad_x[0].unsqueeze(-2), grad_y[0].unsqueeze(-2)], axis=-2)
+        return jacobian
+
+
 class TestFaceRenderDataset:
     def __init__(
         self,
         args,
+        # config,
         coeff_path,
         pic_path,
         first_coeff_path,
@@ -80,6 +149,7 @@ class TestFaceRenderDataset:
         semantic_radius=13,
     ) -> None:
         self.args = args
+        # self.cfg = config
         self.coeff_path = coeff_path
         self.pic_path = pic_path
         self.first_coeff_path = first_coeff_path
@@ -96,8 +166,9 @@ class TestFaceRenderDataset:
         Take the 1st image in the video if it is training.
         """
         img1 = Image.open(pic_path)
-        source_image = np.array(img1)
-        source_image = img_as_float32(source_image)
+        img1 = np.array(img1)
+
+        source_image = img_as_float32(img1)
         source_image = transform.resize(source_image, (self.size, self.size, 3))
         source_image = source_image.transpose((2, 0, 1))
 
@@ -123,7 +194,7 @@ class TestFaceRenderDataset:
             source_image_ts = ms.Tensor(source_image)
             source_semantics_ts = ms.Tensor(source_semantics_new)
 
-        return source_image_ts, source_semantics, source_semantics_ts
+        return source_image_ts, source_semantics, source_semantics_ts, img1
 
     def prepare_target_features(self, coeff_path, source_semantics, frame_idx=None, tgt_img_path=None):
         """prepare the driving audio features
@@ -223,6 +294,7 @@ class TestFaceRenderDataset:
             source_image_ts,
             source_semantics,
             source_semantics_ts,
+            source_image_binary,
         ) = self.prepare_source_features(self.pic_path, self.first_coeff_path)
         data["source_image"] = source_image_ts
         data["source_semantics"] = source_semantics_ts
@@ -260,6 +332,7 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
     def __init__(
         self,
         args,
+        # config,
         train_list,  # (img_folder, first_coeff_path, net_coeff_path)
         batch_size,
         expression_scale=1.0,
@@ -268,9 +341,11 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
         size=256,
         semantic_radius=13,
         syncnet_T=5,
+        extractor=None,
     ):
         super().__init__(
             args,
+            # config,
             batch_size=batch_size,
             coeff_path=None,
             pic_path=None,
@@ -283,11 +358,13 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
             semantic_radius=semantic_radius,
         )
 
+        # self.extractor = extractor
         self.all_videos = get_img_paths(train_list)
         self.syncnet_T = syncnet_T
         self.output_columns = [
             "source_image",
             "source_semantics",
+            "source_image_binary",
             "target_semantics",
             "target_image_ts",
             "frame_num",
@@ -324,10 +401,12 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
             source_image_ts,
             source_semantics,
             source_semantics_ts,
+            source_image_binary,
         ) = self.prepare_source_features(src_img_path, first_coeff_path, is_train=True)
 
         data["source_image"] = source_image_ts
         data["source_semantics"] = source_semantics_ts
+        data["source_image_binary"] = source_image_binary
 
         # target
         frame_num, target_semantics_ts, target_image_ts = self.prepare_target_features(
