@@ -141,8 +141,12 @@ class NLayerDiscriminator(nn.Cell):
 
 
 class Hopenet(nn.Cell):
+    """Fine-Grained Head Pose Estimation Without Keypoints
+    # https://github.com/natanielruiz/deep-head-pose
     # Hopenet with 3 output layers for yaw, pitch and roll
     # Predicts Euler angles by binning and regression with the expected value
+    """
+
     def __init__(self, block, layers, num_bins):
         self.inplanes = 64
         super(Hopenet, self).__init__()

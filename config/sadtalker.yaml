@@ -109,7 +109,8 @@ facerender:
         num_bins: 66
 
   train:
-    pretrained_vgg: False
+    pretrained_vgg: /disk1/katekong/sadtalker/checkpoints/ms/ms_vgg19.ckpt
+    pretrained_hopenet: /disk1/katekong/sadtalker/checkpoints/ms/ms_hopenet_robust_alpha1.ckpt
     transform_params:
       sigma_affine: 0.05
       sigma_tps: 0.005

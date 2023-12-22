@@ -37,11 +37,12 @@ def normalize_kp(
 
 
 def headpose_pred_to_degree(pred):
+    datatype = pred.dtype
     idx_tensor = [idx for idx in range(66)]
-    idx_tensor = ms.Tensor(idx_tensor, dtype=pred.dtype)
+    idx_tensor = ms.Tensor(idx_tensor, dtype=datatype)
     pred = ops.softmax(pred)
     degree = ops.sum(pred * idx_tensor, 1) * 3.0 - 99.0
-    degree = ops.cast(degree, pred.dtype)
+    degree = ops.cast(degree, datatype)
     return degree
 
 

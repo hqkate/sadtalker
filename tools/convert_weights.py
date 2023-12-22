@@ -328,7 +328,21 @@ def convert_lipreading():
                   "checkpoints/lipreading/ms_resnet18_dctcn_audio.ckpt", ms2pt)
 
 
+def convert_hopenet():
+    from models.face3d.facexlib.resnet import Bottleneck
+    from models.facerender.networks import Hopenet
+
+    hopenet = Hopenet(Bottleneck, [3, 4, 6, 3], 66)
+    ms_params = hopenet.get_parameters()
+
+    with open("./pt_weights_hopenet.pkl", "rb") as f:
+        state_dict = pickle.load(f)
+
+    param_convert(ms_params, state_dict,
+                  "checkpoints/ms/ms_hopenet_robust_alpha1.ckpt")
+
+
 if __name__ == "__main__":
     context.set_context(mode=context.GRAPH_MODE,
                         device_target="CPU", device_id=2)
-    convert_lipreading()
+    convert_hopenet()

@@ -43,7 +43,7 @@ def facerender_trainer(
 
 def train(args, config):
     context.set_context(
-        mode=context.PYNATIVE_MODE, device_target="CPU", device_id=args.device_id
+        mode=context.GRAPH_MODE, device_target="CPU", device_id=args.device_id
     )
 
     save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))

@@ -43,12 +43,15 @@ def apply_image_normalization(input):
     Returns:
         Normalized inputs using the ImageNet normalization.
     """
+    datatype = input.dtype
     # normalize the input back to [0, 1]
-    normalized_input = (input + 1) / 2
+    # normalized_input = (input + 1.0) / 2.0
+
     # normalize the input using the ImageNet mean and std
-    mean = Tensor([0.485, 0.456, 0.406], dtype=normalized_input.dtype).view(1, 3, 1, 1)
-    std = Tensor([0.229, 0.224, 0.225], dtype=normalized_input.dtype).view(1, 3, 1, 1)
-    output = (normalized_input - mean) / std
+    mean = Tensor([0.485, 0.456, 0.406], dtype=datatype).view(1, 3, 1, 1)
+    std = Tensor([0.229, 0.224, 0.225], dtype=datatype).view(1, 3, 1, 1)
+    output = (input - mean) / std
+    output = ops.cast(output, datatype)
     return output
 
 
@@ -207,7 +210,17 @@ class GWithLossCell(nn.Cell):
 
         # Head pose loss
         self.resize_mode = "bilinear"
-        self.hopenet = Hopenet(Bottleneck, [3, 4, 6, 3], 66)  # TODO: load pretrained!
+        hopenet = Hopenet(Bottleneck, [3, 4, 6, 3], 66)
+
+        hopenet_path = self.cfg.facerender.train.pretrained_hopenet
+        if hopenet_path:
+            hopenet_params = ms.load_checkpoint(hopenet_path)
+            ms.load_param_into_net(hopenet, hopenet_params)
+            print(
+                f"Finished loading the pretrained checkpoint {hopenet_path} into Hopenet."
+            )
+
+        self.hopenet = hopenet
         self.hopenet.set_train(False)
 
         # Deformation prior loss
@@ -221,15 +234,21 @@ class GWithLossCell(nn.Cell):
         self.real_target = Tensor(1.0, mstype.float32)
 
         # Keypoint unsupervised loss
-        self.he_estimator = HEEstimator(
+        he_estimator = HEEstimator(
             **cfg.facerender.model_params.he_estimator_params,
             **cfg.facerender.model_params.common_params,
         )
         he_estimator_path = os.path.join(
-            cfg.facerender.path.get("checkpoint_dir", ""), cfg.facerender.path.get("he_estimator_checkpoint", None)
+            cfg.facerender.path.get("checkpoint_dir", ""),
+            cfg.facerender.path.get("he_estimator_checkpoint", None),
         )
         estimator_params = ms.load_checkpoint(he_estimator_path)
-        ms.load_param_into_net(self.he_estimator, estimator_params)
+        ms.load_param_into_net(he_estimator, estimator_params)
+        print(
+            f"Finished loading the pretrained checkpoint {he_estimator_path} into HEEstimator."
+        )
+
+        self.he_estimator = he_estimator
         self.he_estimator.set_train(False)
 
     def construct(
@@ -269,46 +288,42 @@ class GWithLossCell(nn.Cell):
         loss_adversarial = self.criterion(output_pred, real_target)
 
         # Equivariance loss
-        transform = Transform(
-            source_image.shape[0], **self.cfg.facerender.train.transform_params
-        )
+        # transform = Transform(
+        #     source_image.shape[0], **self.cfg.facerender.train.transform_params
+        # )
 
-        transformed_frame = (
-            transform.transform_frame(source_image_binary.astype(mstype.float32))
-        )  # (bs, 256, 256, 3)
-        coeff_dict = self.extractor.extract_3dmm(list(ops.unbind(transformed_frame)))
-        transformed_semantics = coeff_dict["coeff_3dmm"][:, : source_semantics.shape[1]]
-        transformed_semantics = Tensor(transformed_semantics, mstype.float32).unsqueeze(
-            -1
-        )
-        transformed_semantics = transformed_semantics.repeat(
-            self.semantic_radius * 2 + 1, axis=-1
-        )
+        # transformed_frame = transform.transform_frame(
+        #     source_image_binary.astype(mstype.float32)
+        # )  # (bs, 256, 256, 3)
+        # coeff_dict = self.extractor.extract_3dmm(list(ops.unbind(transformed_frame)))
+        # transformed_semantics = coeff_dict["coeff_3dmm"][:, : source_semantics.shape[1]]
+        # transformed_semantics = Tensor(transformed_semantics, mstype.float32).unsqueeze(
+        #     -1
+        # )
+        # transformed_semantics = transformed_semantics.repeat(
+        #     self.semantic_radius * 2 + 1, axis=-1
+        # )
 
-        transformed_he_source = self.generator.mapping(transformed_semantics)
+        # transformed_he_source = self.generator.mapping(transformed_semantics)
 
-        transformed_kp = self.generator.keypoint_transformation_train(
-            kp_canonical, transformed_he_source
-        )
+        # transformed_kp = self.generator.keypoint_transformation_train(
+        #     kp_canonical, transformed_he_source
+        # )
 
-        ## Value loss part
-        # project 3d -> 2d
-        kp_source_2d = kp_source[:, :, :2]
-        transformed_kp_2d = transformed_kp[:, :, :2]
-        loss_eqv = ops.abs(
-            kp_source_2d - transform.warp_coordinates(transformed_kp_2d)
-        ).mean()
-        # loss_eqv = 0.0
+        # ## Value loss part
+        # # project 3d -> 2d
+        # kp_source_2d = kp_source[:, :, :2]
+        # transformed_kp_2d = transformed_kp[:, :, :2]
+        # loss_eqv = ops.abs(
+        #     kp_source_2d - transform.warp_coordinates(transformed_kp_2d)
+        # ).mean()
+        loss_eqv = 0.0
 
         # Keypoint prior loss
-        loss_kp = 0.0
-        for i in range(kp_driving.shape[1]):
-            for j in range(kp_driving.shape[1]):
-                dist = ops.dist(kp_driving[:, i, :], kp_driving[:, j, :], p=2) ** 2
-                dist = self.dt - dist  # set Dt = 0.1
-                dd = ops.gt(dist, 0)
-                value = (dist * dd).mean()
-                loss_kp += value
+        dist = ops.cdist(kp_driving, kp_driving, p=2.0).pow(2)
+        dist = self.dt - dist  # set Dt = 0.1
+        dd = ops.gt(dist, 0)
+        loss_kp = (dist * dd).mean(axis=0).sum()
 
         kp_mean_depth = kp_driving[:, :, -1].mean(-1)
         value_depth = ops.abs(kp_mean_depth - self.zt).mean()  # set Zt = 0.33
@@ -322,11 +337,13 @@ class GWithLossCell(nn.Cell):
         source_224 = apply_image_normalization(source_224)
 
         yaw_gt, pitch_gt, roll_gt = self.hopenet(source_224)
+
         yaw_gt = headpose_pred_to_degree(yaw_gt)
         pitch_gt = headpose_pred_to_degree(pitch_gt)
         roll_gt = headpose_pred_to_degree(roll_gt)
 
         yaw, pitch, roll = he_source[0], he_source[1], he_source[2]
+
         yaw = headpose_pred_to_degree(yaw)
         pitch = headpose_pred_to_degree(pitch)
         roll = headpose_pred_to_degree(roll)
@@ -336,6 +353,7 @@ class GWithLossCell(nn.Cell):
             + ops.abs(pitch - pitch_gt).mean()
             + ops.abs(roll - roll_gt).mean()
         )
+        # loss_headpose = 0.0
 
         # Deformation prior loss
         exp_driving = he_driving[-1]
@@ -351,7 +369,7 @@ class GWithLossCell(nn.Cell):
         loss_g = (
             1.0 * loss_adversarial
             + 10.0 * loss_perceptual
-            + 20.0 * loss_eqv # TODO!!
+            + 20.0 * loss_eqv  # TODO!!
             + 10.0 * loss_kp
             + 20.0 * loss_headpose
             + 5.0 * loss_deform

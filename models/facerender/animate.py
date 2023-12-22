@@ -32,15 +32,18 @@ def load_cpk_facevid2vid(config, generator=None, kp_detector=None, he_estimator=
         ckpt_dir, config.path.get("he_estimator_checkpoint", None)
     )
 
-    if generator_path is not None:
+    if (generator_path is not None) and (generator is not None):
         generator_params = ms.load_checkpoint(generator_path)
         ms.load_param_into_net(generator, generator_params)
-    if kp_extractor_path is not None:
+        print(f"Finished loading the pretrained checkpoint {generator_path} into Generator.")
+    if (kp_extractor_path is not None) and (kp_detector is not None):
         detector_params = ms.load_checkpoint(kp_extractor_path)
         ms.load_param_into_net(kp_detector, detector_params)
-    if he_estimator_path is not None:
+        print(f"Finished loading the pretrained checkpoint {kp_extractor_path} into KPDetector.")
+    if (he_estimator_path is not None) and (he_estimator is not None):
         estimator_params = ms.load_checkpoint(he_estimator_path)
         ms.load_param_into_net(he_estimator, estimator_params)
+        print(f"Finished loading the pretrained checkpoint {he_estimator_path} into HEEstimator.")
 
 
 def load_cpk_mapping(config, mapping):
@@ -242,17 +245,24 @@ class AnimateModel(nn.Cell):
     def __init__(self, config):
         super(AnimateModel, self).__init__()
 
-        self.generator = OcclusionAwareSPADEGenerator(
+        generator = OcclusionAwareSPADEGenerator(
             **config.model_params.generator_params, **config.model_params.common_params
         )
-        self.kp_extractor = KPDetector(
+        kp_extractor = KPDetector(
             **config.model_params.kp_detector_params,
             **config.model_params.common_params,
         )
-        self.mapping = MappingNet(**config.model_params.mapping_params)
+        mapping = MappingNet(**config.model_params.mapping_params)
+
+        load_cpk_facevid2vid(config, generator, kp_extractor)
+        load_cpk_mapping(config, mapping=mapping)
 
         self.zeros_mat = ops.zeros((2, 1), dtype=ms.float32)
         self.ones_mat = ops.ones((2, 1), dtype=ms.float32)
+
+        self.kp_extractor = kp_extractor
+        self.generator = generator
+        self.mapping = mapping
 
         self.kp_extractor.set_train(True)
         self.generator.set_train(True)
@@ -359,7 +369,6 @@ class AnimateModel(nn.Cell):
         return rot_mat
 
     def construct(self, source_image, source_semantics, target_semantics):
-
         kp_canonical = self.kp_extractor(source_image)  # value
         he_source = self.mapping(source_semantics)  # (yaw, pitch, roll, t, exp)
         kp_source = self.keypoint_transformation_train(kp_canonical, he_source)
