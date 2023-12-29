@@ -6,10 +6,10 @@ from skimage import io, img_as_float32, transform
 import mindspore as ms
 from mindspore import ops
 import scipy.io as scio
-from utils.get_file import get_img_paths
 from glob import glob
 
 from models.facerender.modules.utils import make_coordinate_grid_2d
+from utils.get_file import get_img_paths
 
 
 def transform_semantic_1(semantic, semantic_radius):
@@ -73,18 +73,18 @@ class Transform:
     """
 
     def __init__(self, bs, **kwargs):
-        noise = ops.normal(shape=(bs, 2, 3), mean=0, stddev=kwargs["sigma_affine"])
-        self.theta = noise + ops.eye(2, 3).view(1, 2, 3)
-        self.bs = bs
+        noise = ops.normal(shape=(2, 3), mean=0, stddev=kwargs["sigma_affine"])
+        self.theta = noise + ops.eye(2, 3)
+        self.bs = 1
 
         if ("sigma_tps" in kwargs) and ("points_tps" in kwargs):
             self.tps = True
             self.control_points = make_coordinate_grid_2d(
                 (kwargs["points_tps"], kwargs["points_tps"]), type=noise.dtype
             )
-            self.control_points = self.control_points.unsqueeze(0)
+            # self.control_points = self.control_points.unsqueeze(0)
             self.control_params = ops.normal(
-                shape=(bs, 1, kwargs["points_tps"] ** 2),
+                shape=(1, kwargs["points_tps"] ** 2),
                 mean=0,
                 stddev=kwargs["sigma_tps"],
             )
@@ -92,35 +92,41 @@ class Transform:
             self.tps = False
 
     def transform_frame(self, frame):
-        grid = make_coordinate_grid_2d(frame.shape[2:], type=frame.dtype).unsqueeze(0)
-        grid = grid.view(1, frame.shape[2] * frame.shape[3], 2)
+        datatype = frame.dtype
+        grid = make_coordinate_grid_2d(frame.shape[1:], type=datatype).unsqueeze(0)
+        grid = grid.view(frame.shape[1] * frame.shape[2], 2)
         grid = self.warp_coordinates(grid).view(
-            self.bs, frame.shape[2], frame.shape[3], 2
+            frame.shape[1], frame.shape[2], 2
         )
-        return ops.grid_sample(frame, grid, padding_mode="reflection")
+        res_frame = ops.grid_sample(frame.unsqueeze(0), grid.unsqueeze(0), padding_mode="reflection").squeeze(0)
+        return res_frame
 
     def warp_coordinates(self, coordinates):
-        theta = self.theta.astype(coordinates.dtype)
-        theta = theta.unsqueeze(1)
+
+        datatype = coordinates.dtype
+        theta = self.theta.astype(datatype)
+        theta = theta.unsqueeze(0)
         transformed = (
-            ops.matmul(theta[:, :, :, :2], coordinates.unsqueeze(-1))
-            + theta[:, :, :, 2:]
+            ops.matmul(theta[:, :, :2], coordinates.unsqueeze(-1))
+            + theta[:, :, 2:]
         )
         transformed = transformed.squeeze(-1)
 
         if self.tps:
-            control_points = self.control_points.astype(coordinates.dtype)
-            control_params = self.control_params.astype(coordinates.dtype)
+            control_points = self.control_points.astype(datatype)
+            control_params = self.control_params.astype(datatype)
             distances = coordinates.view(
-                coordinates.shape[0], -1, 1, 2
-            ) - control_points.view(1, 1, -1, 2)
+                -1, 1, 2
+            ) - control_points.view(1, -1, 2)
             distances = ops.abs(distances).sum(-1)
 
             result = distances**2
             result = result * ops.log(distances + 1e-6)
             result = result * control_params
-            result = result.sum(axis=2).view(self.bs, coordinates.shape[1], 1)
+            result = result.sum(axis=1).view(coordinates.shape[0], 1)
             transformed = transformed + result
+
+        transformed = ops.cast(transformed, datatype)
 
         return transformed
 
@@ -136,7 +142,7 @@ class TestFaceRenderDataset:
     def __init__(
         self,
         args,
-        # config,
+        config,
         coeff_path,
         pic_path,
         first_coeff_path,
@@ -149,7 +155,7 @@ class TestFaceRenderDataset:
         semantic_radius=13,
     ) -> None:
         self.args = args
-        # self.cfg = config
+        self.cfg = config
         self.coeff_path = coeff_path
         self.pic_path = pic_path
         self.first_coeff_path = first_coeff_path
@@ -332,7 +338,7 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
     def __init__(
         self,
         args,
-        # config,
+        config,
         train_list,  # (img_folder, first_coeff_path, net_coeff_path)
         batch_size,
         expression_scale=1.0,
@@ -345,7 +351,7 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
     ):
         super().__init__(
             args,
-            # config,
+            config,
             batch_size=batch_size,
             coeff_path=None,
             pic_path=None,
@@ -358,20 +364,40 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
             semantic_radius=semantic_radius,
         )
 
-        # self.extractor = extractor
+        self.extractor = extractor
         self.all_videos = get_img_paths(train_list)
         self.syncnet_T = syncnet_T
         self.output_columns = [
             "source_image",
             "source_semantics",
-            "source_image_binary",
+            "transformed_src_semantics",
             "target_semantics",
             "target_image_ts",
             "frame_num",
         ]
 
+        #transform for equivariance loss
+        self.equi_transform = Transform(batch_size, **config.facerender.train.transform_params)
+
     def get_output_columns(self):
         return self.output_columns
+
+    def transform_equivariance(self, image_binary):
+
+        len_coeff = 70 if "full" not in self.preprocess.lower() else 73
+
+        transformed_frame = self.equi_transform.transform_frame(
+            ms.Tensor(image_binary, ms.float32)
+        )  # (bs, 256, 256, 3)
+        coeff_dict = self.extractor.extract_3dmm([transformed_frame])
+        transformed_semantics = coeff_dict["coeff_3dmm"][:, : len_coeff]
+        transformed_semantics = ms.Tensor(transformed_semantics, ms.float32).unsqueeze(
+            -1
+        )
+        transformed_semantics = transformed_semantics.repeat(
+            self.semantic_radius * 2 + 1, axis=-1
+        )
+        return transformed_semantics.squeeze(0)
 
     def __next__(self):
         if self._index >= len(self.all_videos):
@@ -406,7 +432,10 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
 
         data["source_image"] = source_image_ts
         data["source_semantics"] = source_semantics_ts
-        data["source_image_binary"] = source_image_binary
+
+        # transform
+        transformed_src_semantics = self.transform_equivariance(source_image_binary)
+        data["transformed_src_semantics"] = transformed_src_semantics
 
         # target
         frame_num, target_semantics_ts, target_image_ts = self.prepare_target_features(

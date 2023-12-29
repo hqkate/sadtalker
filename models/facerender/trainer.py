@@ -31,7 +31,7 @@ from models.facerender.modules.utils import make_coordinate_grid_2d
 from models.facerender.modules.make_animation import headpose_pred_to_degree
 from models.face3d.facexlib.resnet import Bottleneck
 from models.facerender.networks import Hopenet
-from utils.preprocess import CropAndExtract
+from datasets.dataset_facerender import Transform
 
 
 def apply_image_normalization(input):
@@ -55,10 +55,11 @@ def apply_image_normalization(input):
     return output
 
 
+"""
 class Transform:
-    """
-    Random tps transformation for equivariance constraints.
-    """
+
+    # Random tps transformation for equivariance constraints.
+
 
     def __init__(self, bs, **kwargs):
         noise = ops.normal(shape=(bs, 2, 3), mean=0, stddev=kwargs["sigma_affine"])
@@ -118,7 +119,7 @@ class Transform:
         grad_y = ops.grad(new_coordinates[..., 1].sum(), coordinates, create_graph=True)
         jacobian = ops.cat([grad_x[0].unsqueeze(-2), grad_y[0].unsqueeze(-2)], axis=-2)
         return jacobian
-
+"""
 
 class TrainOneStepCell(nn.Cell):
     """TrainOneStepCell"""
@@ -201,8 +202,7 @@ class GWithLossCell(nn.Cell):
         self.cfg = cfg
 
         # Equivariance loss
-        self.semantic_radius = 13
-        self.extractor = CropAndExtract(self.cfg.preprocess)
+        self.equi_params = cfg.facerender.train.transform_params
 
         # Keypoint prior loss
         self.dt = 0.1  # distance threshold
@@ -255,9 +255,9 @@ class GWithLossCell(nn.Cell):
         self,
         source_image,
         source_semantics,
-        source_image_binary,
         target_semantics,
         target_image_ts,
+        transformed_src_semantics,
     ):
         (
             pred_semantics,
@@ -288,36 +288,21 @@ class GWithLossCell(nn.Cell):
         loss_adversarial = self.criterion(output_pred, real_target)
 
         # Equivariance loss
-        # transform = Transform(
-        #     source_image.shape[0], **self.cfg.facerender.train.transform_params
-        # )
+        # transform = Transform(source_image.shape[0], **self.equi_params)
+        transformed_he_source = self.generator.mapping(transformed_src_semantics)
 
-        # transformed_frame = transform.transform_frame(
-        #     source_image_binary.astype(mstype.float32)
-        # )  # (bs, 256, 256, 3)
-        # coeff_dict = self.extractor.extract_3dmm(list(ops.unbind(transformed_frame)))
-        # transformed_semantics = coeff_dict["coeff_3dmm"][:, : source_semantics.shape[1]]
-        # transformed_semantics = Tensor(transformed_semantics, mstype.float32).unsqueeze(
-        #     -1
-        # )
-        # transformed_semantics = transformed_semantics.repeat(
-        #     self.semantic_radius * 2 + 1, axis=-1
-        # )
+        transformed_kp = self.generator.keypoint_transformation_train(
+            kp_canonical, transformed_he_source
+        )
 
-        # transformed_he_source = self.generator.mapping(transformed_semantics)
-
-        # transformed_kp = self.generator.keypoint_transformation_train(
-        #     kp_canonical, transformed_he_source
-        # )
-
-        # ## Value loss part
-        # # project 3d -> 2d
-        # kp_source_2d = kp_source[:, :, :2]
-        # transformed_kp_2d = transformed_kp[:, :, :2]
-        # loss_eqv = ops.abs(
-        #     kp_source_2d - transform.warp_coordinates(transformed_kp_2d)
-        # ).mean()
-        loss_eqv = 0.0
+        ## Value loss part
+        # project 3d -> 2d
+        kp_source_2d = kp_source[:, :, :2]
+        transformed_kp_2d = transformed_kp[:, :, :2]
+        loss_eqv = ops.abs(
+            kp_source_2d - transformed_kp_2d
+        ).mean()
+        # loss_eqv = 0.0
 
         # Keypoint prior loss
         dist = ops.cdist(kp_driving, kp_driving, p=2.0).pow(2)
@@ -416,7 +401,7 @@ class FaceRenderTrainer:
     def run(self, data_batch):
         source_image = data_batch["source_image"]
         source_semantics = data_batch["source_semantics"]
-        source_image_binary = data_batch["source_image_binary"]
+        transformed_src_semantics = data_batch["transformed_src_semantics"]
         target_semantics = data_batch["target_semantics"]
         target_image_ts = data_batch["target_image_ts"]
 
@@ -425,9 +410,9 @@ class FaceRenderTrainer:
         loss_g, output = self.train_one_step_g(
             source_image,
             source_semantics,
-            source_image_binary,
             target_semantics,
             target_image_ts,
+            transformed_src_semantics,
         )
 
         print("running train_one_step_d ...")

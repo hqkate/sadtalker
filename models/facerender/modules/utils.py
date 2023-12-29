@@ -228,27 +228,17 @@ class Encoder(nn.Cell):
 
         down_blocks = []
         for i in range(num_blocks):
-            block = DownBlock3d(
-                        in_features
-                        if i == 0
-                        else min(max_features, block_expansion * (2**i)),
-                        min(max_features, block_expansion * (2 ** (i + 1))),
-                        kernel_size=3,
-                        padding=1,
-                    )
-
-            setattr(self, f"down_block_{i}", block)
+            down_blocks.append(DownBlock3d(in_features if i == 0 else min(max_features, block_expansion * (2 ** i)),
+                                           min(max_features,
+                                               block_expansion * (2 ** (i + 1))),
+                                           kernel_size=3, padding=1))
+        self.down_blocks = nn.CellList(down_blocks)
 
     def construct(self, x):
-        out1 = self.down_block_0(x)
-        out2 = self.down_block_1(out1)
-        out3 = self.down_block_2(out2)
-        out4 = self.down_block_3(out3)
-        out5 = self.down_block_4(out4)
-
-        # for down_block in self.down_blocks:
-        #     outs.append(down_block(outs[-1]))
-        return [x, out1, out2, out3, out4, out5]
+        outs = [x]
+        for down_block in self.down_blocks:
+            outs.append(down_block(outs[-1]))
+        return outs
 
 
 class Decoder(nn.Cell):

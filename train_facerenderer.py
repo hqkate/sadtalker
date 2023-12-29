@@ -17,6 +17,7 @@ from models.facerender.animate import AnimateModel
 from models.facerender.networks import NLayerDiscriminator
 from models.facerender.vgg19_extractor import get_feature_extractor
 from utils.callbacks import EvalSaveCallback
+from utils.preprocess import CropAndExtract
 from models.facerender.trainer import (
     GWithLossCell,
     DWithLossCell,
@@ -43,7 +44,7 @@ def facerender_trainer(
 
 def train(args, config):
     context.set_context(
-        mode=context.GRAPH_MODE, device_target="CPU", device_id=args.device_id
+        mode=context.GRAPH_MODE, device_target="Ascend", device_id=args.device_id
     )
 
     save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))
@@ -51,6 +52,7 @@ def train(args, config):
 
     # init model
     animate_model = AnimateModel(config.facerender)
+    feat_extractor = CropAndExtract(config.preprocess)
 
     # amp level
     amp_level = config.system.get("amp_level", "O2")
@@ -59,6 +61,7 @@ def train(args, config):
     # dataset
     dataset = TrainFaceRenderDataset(
         args=args,
+        config=config,
         train_list=args.train_list,  # (img_folder, first_coeff_path, net_coeff_path)
         batch_size=args.batch_size,
         expression_scale=args.expression_scale,
@@ -67,6 +70,7 @@ def train(args, config):
         size=args.size,
         semantic_radius=13,
         syncnet_T=5,
+        extractor=feat_extractor,
     )
 
     dataset_column_names = dataset.get_output_columns()

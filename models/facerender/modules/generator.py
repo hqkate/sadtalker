@@ -74,6 +74,7 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
                 estimate_occlusion_map=estimate_occlusion_map,
                 **dense_motion_params
             )
+
         else:
             self.dense_motion_network = None
 
