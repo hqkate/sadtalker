@@ -117,7 +117,7 @@ class Conv2dNormalized(nn.Cell):
         """Weights normalization"""
         eps = 1e-12
         size = weight_orig.shape
-        weight_mat = weight_orig.ravel().view(size[0], -1)
+        weight_mat = weight_orig.flatten().view(size[0], -1)
 
         if self.training:
             v = ops.matmul(weight_mat.T, u)
@@ -131,8 +131,8 @@ class Conv2dNormalized(nn.Cell):
             u = ops.depend(u, ops.assign(self.weight_u, u))
             v = ops.depend(v, ops.assign(self.weight_v, v))
 
-        u = ops.stop_gradient(u)
-        v = ops.stop_gradient(v)
+        # u = ops.stop_gradient(u)
+        # v = ops.stop_gradient(v)
 
         weight_norm = self.spectral_norm(weight_mat, u, v)
         weight_sn = weight_mat / weight_norm.clip(eps, None)

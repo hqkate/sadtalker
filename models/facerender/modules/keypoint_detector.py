@@ -78,8 +78,7 @@ class KPDetector(nn.Cell):
 
         self.temperature = temperature
         self.scale_factor = scale_factor
-        self.heatmap_shape = (16, 64, 64)
-        self.grid = make_coordinate_grid(self.heatmap_shape, ms.float32).unsqueeze(0).unsqueeze(0)
+
         if self.scale_factor != 1:
             self.down = AntiAliasInterpolation2d(image_channel, self.scale_factor)
 
@@ -87,8 +86,10 @@ class KPDetector(nn.Cell):
         """
         Extract the mean from a heatmap
         """
+        shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
-        value = ops.sum(heatmap * self.grid, dim=(2, 3, 4))
+        grid = make_coordinate_grid(shape[2:], heatmap.dtype).unsqueeze(0).unsqueeze(0)
+        value = ops.sum(heatmap * grid, dim=(2, 3, 4))
 
         return value
 

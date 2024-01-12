@@ -27,10 +27,9 @@ class SPADEDecoder(nn.Cell):
         self.up_0 = SPADEResnetBlock(2 * ic, ic, norm_G, label_nc)
         self.up_1 = SPADEResnetBlock(ic, oc, norm_G, label_nc)
         self.conv_img = nn.Conv2d(oc, 3, 3, pad_mode="pad", padding=1, has_bias=True)
-        self.up = nn.Upsample(scale_factor=2.0, mode="area")
+        # self.up = nn.Upsample(scale_factor=2.0, mode="area")
 
     def construct(self, feature):
-        import pdb; pdb.set_trace()
         seg = feature
         x = self.fc(feature)
         x = self.G_middle_0(x, seg)
@@ -39,11 +38,10 @@ class SPADEDecoder(nn.Cell):
         x = self.G_middle_3(x, seg)
         x = self.G_middle_4(x, seg)
         x = self.G_middle_5(x, seg)
-        import pdb; pdb.set_trace()
-        x = self.up(x)
-        x = self.up_0(x, seg)  # 256, 128, 128
-        x = self.up(x)
-        x = self.up_1(x, seg)  # 64, 256, 256
+        x = ops.interpolate(x, size=(x.shape[-2] * 2, x.shape[-1] * 2))
+        x = self.up_0(x, seg)  # bs, 256, 128, 128
+        x = ops.interpolate(x, size=(x.shape[-2] * 2, x.shape[-1] * 2))
+        x = self.up_1(x, seg)  # bs, 64, 256, 256
 
         x = self.conv_img(ops.leaky_relu(x, 2e-1))
         x = ops.sigmoid(x)

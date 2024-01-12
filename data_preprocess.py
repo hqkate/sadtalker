@@ -17,7 +17,8 @@ from datasets.dataset_audio2coeff import TestDataset
 from models.audio2coeff import Audio2Coeff
 
 
-template = "./ffmpeg-6.0-amd64-static/ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
+# template = "./ffmpeg-6.0-amd64-static/ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
+template = "ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
 
 
 def extract_audios_from_videos_multi(video_paths, audio_save_dir, video_org_dir):

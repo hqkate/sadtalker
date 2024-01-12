@@ -75,7 +75,8 @@ class RetinaFaceBody(ResNet):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x = self.maxpool(x)
+        # x = self.maxpool(x)
+        x = ops.MaxPool(kernel_size=3, strides=2, pad_mode="same")(x)
 
         x1 = self.layer1(x)
         x2 = self.layer2(x1)

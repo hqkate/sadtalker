@@ -39,14 +39,14 @@ class Audio2Coeff():
         path_audio2pose_checkpoint = os.path.join(checkpoint_dir, cfg_pose.path.audio2pose_checkpoint)
         load_cpk(path_audio2pose_checkpoint, model=self.audio2pose_model)
 
-        for param in self.audio2pose_model.get_parameters():
-            param.requires_grad = False
-
         for param in self.audio2exp_model.get_parameters():
             param.requires_grad = False
 
-        self.audio2pose_model.set_train(False)
+        for param in self.audio2pose_model.get_parameters():
+            param.requires_grad = False
+
         self.audio2exp_model.set_train(False)
+        self.audio2pose_model.set_train(False)
 
     def generate(self, batch, coeff_save_dir, pose_style, ref_pose_coeff_path=None):
         # test

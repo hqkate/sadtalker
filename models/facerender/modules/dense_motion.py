@@ -61,7 +61,7 @@ class DenseMotionNetwork(nn.Cell):
 
         bs, _, d, h, w = feature.shape
 
-        identity_grid = make_coordinate_grid((d, h, w), type=kp_source.dtype)
+        identity_grid = make_coordinate_grid((d, h, w))
         identity_grid = identity_grid.view(1, 1, d, h, w, 3)
         coordinate_grid = identity_grid - kp_driving.view(
             bs, self.num_kp, 1, 1, 1, 3
@@ -72,7 +72,8 @@ class DenseMotionNetwork(nn.Cell):
         )  # (bs, num_kp, d, h, w, 3)
 
         # adding background feature
-        identity_grid = identity_grid.repeat(bs, axis=0)
+        # identity_grid = identity_grid.repeat(bs, axis=0)
+        identity_grid = ops.cat([identity_grid] * bs, axis=0)
         sparse_motions = ops.cat(
             [identity_grid, driving_to_source], axis=1
         )  # bs num_kp+1 d h w 3
@@ -83,9 +84,11 @@ class DenseMotionNetwork(nn.Cell):
 
     def create_deformed_feature(self, feature, sparse_motions):
         bs, _, d, h, w = feature.shape
-        feature_repeat = (
-            feature.unsqueeze(1).unsqueeze(1).repeat(self.num_kp + 1, axis=1)
-        )  # (bs, num_kp+1, 1, c, d, h, w)
+        feature_repeat = feature.unsqueeze(1).unsqueeze(1)
+        feature_repeat = ops.cat([feature_repeat] * (self.num_kp + 1), axis=1)
+        # feature_repeat = (
+        #     feature.unsqueeze(1).unsqueeze(1).repeat(self.num_kp + 1, axis=1)
+        # )  # (bs, num_kp+1, 1, c, d, h, w)
         # (bs*(num_kp+1), c, d, h, w)
         feature_repeat = feature_repeat.view(bs * (self.num_kp + 1), -1, d, h, w)
         # (bs*(num_kp+1), d, h, w, 3) !!!!

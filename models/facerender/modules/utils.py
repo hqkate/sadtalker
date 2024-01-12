@@ -17,10 +17,8 @@ def kp2gaussian(mean, spatial_size, kp_variance):
     coordinate_grid = coordinate_grid.view(shape)
     repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 1)
 
-    coordinate_grid = coordinate_grid.repeat(repeats[0], axis=0)
-    coordinate_grid = coordinate_grid.repeat(repeats[1], axis=1)
-    coordinate_grid = coordinate_grid.repeat(repeats[2], axis=2)
-    coordinate_grid = coordinate_grid.repeat(repeats[3], axis=3)
+    for i, num in enumerate(repeats):
+        coordinate_grid = ops.cat([coordinate_grid] * num, axis=i)
 
     # Preprocess kp shape
     shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 3)
@@ -52,12 +50,12 @@ def make_coordinate_grid_2d(spatial_size, type):
     return meshed
 
 
-def make_coordinate_grid(spatial_size, type):
+def make_coordinate_grid(spatial_size, type=None):
     d, h, w = spatial_size
 
-    x = ops.arange(w).astype(type)
-    y = ops.arange(h).astype(type)
-    z = ops.arange(d).astype(type)
+    x = ops.arange(w)
+    y = ops.arange(h)
+    z = ops.arange(d)
 
     x = 2.0 * (x.div(w - 1.0)) - 1.0
     y = 2.0 * (y.div(h - 1.0)) - 1.0
@@ -67,7 +65,7 @@ def make_coordinate_grid(spatial_size, type):
     xx = x.view(1, 1, -1).repeat(d, axis=0).repeat(h, axis=1)
     zz = z.view(-1, 1, 1).repeat(h, axis=1).repeat(w, axis=2)
 
-    meshed = ops.cat([xx.unsqueeze(3), yy.unsqueeze(3), zz.unsqueeze(3)], 3).astype(type)
+    meshed = ops.cat([xx.unsqueeze(3), yy.unsqueeze(3), zz.unsqueeze(3)], 3)
 
     return meshed
 
@@ -155,7 +153,12 @@ class UpBlock3d(nn.Cell):
         self.norm = BatchNorm3d(out_features, affine=True)
 
     def construct(self, x):
-        out = ops.interpolate(x, scale_factor=(1.0, 2.0, 2.0), mode="area")
+        n, c, d, h, w = x.shape
+        x = x.view(-1, d, h, w)
+        out = ops.interpolate(x, size=(h*2, w*2))
+        out = out.view(n, c, d, h*2, w*2)
+        # out = ops.interpolate(x, scale_factor=(1.0, 2.0, 2.0), mode="area")
+
         out = self.conv(out)
         out = self.norm(out)
         out = ops.relu(out)
@@ -210,14 +213,17 @@ class DownBlock3d(nn.Cell):
             has_bias=True,
         )
         self.norm = BatchNorm3d(out_features, affine=True)
-        self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), pad_mode='pad')
+        # self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), pad_mode='pad')
         # self.pool = ops.avg_pool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), divisor_override=None, pad_mode='pad')
 
     def construct(self, x):
         out = self.conv(x)
         out = self.norm(out)
         out = ops.relu(out)
-        out = self.pool(out)
+        n, c, d, h, w = out.shape
+        out = out.view(-1, d, h, w)
+        out = ops.AvgPool(kernel_size=(2, 2), strides=(2, 2))(out)
+        out = out.view(n, c, d, out.shape[-2], out.shape[-1])
         return out
 
 
@@ -278,11 +284,12 @@ class Decoder(nn.Cell):
         self.norm = BatchNorm3d(self.out_filters, affine=True)
 
     def construct(self, x):
-        out = x.pop()
+        out = x[-1]
         # for up_block in self.up_blocks[:-1]:
-        for up_block in self.up_blocks:
+        for i, up_block in enumerate(self.up_blocks):
             out = up_block(out)
-            skip = x.pop()
+            idx = 2 + i
+            skip = x[-idx]
             out = ops.cat([out, skip], axis=1)
         # out = self.up_blocks[-1](out)
         out = self.conv(out)
@@ -336,6 +343,7 @@ class KPHourglass(nn.Cell):
             )
 
         in_filters = min(max_features, block_expansion * (2**num_blocks))
+        out_filters = in_filters
         self.conv = nn.Conv2d(
             in_channels=in_filters,
             out_channels=reshape_features,

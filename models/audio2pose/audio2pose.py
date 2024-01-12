@@ -65,7 +65,7 @@ class Audio2Pose(nn.Cell):
         re = num_frames % self.seq_len
 
         pose_motion_pred_list = [
-            ops.zeros(batch['ref'].unsqueeze(1).shape, dtype=batch['ref'].dtype)]
+            ops.zeros(batch['ref'].unsqueeze(1).shape, dtype=ms.float32)]
 
         for i in tqdm(range(div), 'audio2pose:'):
             z = ops.randn(bs, self.latent_dim)
