@@ -67,17 +67,6 @@ class DenseMotionNetwork(nn.Cell):
             bs, self.num_kp, 1, 1, 1, 3
         )
 
-        # if kp_driving[1]:
-
-        #     jacobian = ops.matmul(
-        #         kp_source[1], ops.inverse(kp_driving[1])
-        #     )
-        #     jacobian = jacobian.unsqueeze(-3).unsqueeze(-3).unsqueeze(-3)
-        #     # jacobian = jacobian.repeat(1, 1, d, h, w, 1, 1)
-        #     jacobian = jacobian.repeat(d, axis=2).repeat(h, axis=3).repeat(w, axis=4)
-        #     coordinate_grid = ops.matmul(jacobian, coordinate_grid.unsqueeze(-1))
-        #     coordinate_grid = coordinate_grid.squeeze(-1)
-
         driving_to_source = coordinate_grid + kp_source.view(
             bs, self.num_kp, 1, 1, 1, 3
         )  # (bs, num_kp, d, h, w, 3)
@@ -130,24 +119,24 @@ class DenseMotionNetwork(nn.Cell):
 
         feature = self.compress(feature)
         feature = self.norm(feature)
-        feature = ops.relu(feature)
+        feature = ops.relu(feature) # (2, 4, 16, 64, 64)
 
         # out_dict = dict()
-        sparse_motion = self.create_sparse_motions(feature, kp_driving, kp_source)
-        deformed_feature = self.create_deformed_feature(feature, sparse_motion)
+        sparse_motion = self.create_sparse_motions(feature, kp_driving, kp_source) # (2, 16, 16, 64, 64, 3)
+        deformed_feature = self.create_deformed_feature(feature, sparse_motion) # (2, 16, 4, 16, 64, 64)
 
         heatmap = self.create_heatmap_representations(
             deformed_feature, kp_driving, kp_source
-        )
+        ) # (2, 16, 1, 16, 64, 64)
 
         input_ = ops.cat([heatmap, deformed_feature], axis=2)
         input_ = input_.view(bs, -1, d, h, w)
 
         # input = deformed_feature.view(bs, -1, d, h, w)      # (bs, num_kp+1 * c, d, h, w)
 
-        prediction = self.hourglass(input_)
+        prediction = self.hourglass(input_) # (2, 112, 16, 64, 64)
 
-        mask = self.mask(prediction)
+        mask = self.mask(prediction) # (2, 16, 16, 64, 64)
         mask = ops.softmax(mask, axis=1)
         # out_dict["mask"] = mask
         # (bs, num_kp+1, 1, d, h, w)

@@ -123,7 +123,7 @@ def get_rotation_matrix(yaw, pitch, roll, datatype=ms.float32):
 
 
 def keypoint_transformation(kp_canonical, he, wo_exp=False, yaw_in=None, pitch_in=None, roll_in=None):
-    kp_value = kp_canonical[0].astype(ms.float32)  # (bs, k, 3)
+    kp_value = kp_canonical.astype(ms.float32)  # (bs, k, 3)
     yaw, pitch, roll, t, exp = he
 
     # yaw, pitch, roll = he["yaw"], he["pitch"], he["roll"]
@@ -158,7 +158,7 @@ def keypoint_transformation(kp_canonical, he, wo_exp=False, yaw_in=None, pitch_i
     exp = exp.view(exp.shape[0], -1, 3)
     kp_transformed = kp_t + exp
 
-    return kp_transformed, kp_canonical[1]
+    return kp_transformed
 
 
 def make_animation(

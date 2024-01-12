@@ -17,8 +17,10 @@ def kp2gaussian(mean, spatial_size, kp_variance):
     coordinate_grid = coordinate_grid.view(shape)
     repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 1)
 
-    for i, num in enumerate(repeats):
-        coordinate_grid = coordinate_grid.repeat(num, axis=i)
+    coordinate_grid = coordinate_grid.repeat(repeats[0], axis=0)
+    coordinate_grid = coordinate_grid.repeat(repeats[1], axis=1)
+    coordinate_grid = coordinate_grid.repeat(repeats[2], axis=2)
+    coordinate_grid = coordinate_grid.repeat(repeats[3], axis=3)
 
     # Preprocess kp shape
     shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 3)
@@ -208,7 +210,8 @@ class DownBlock3d(nn.Cell):
             has_bias=True,
         )
         self.norm = BatchNorm3d(out_features, affine=True)
-        self.pool = nn.AvgPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2))
+        self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), pad_mode='pad')
+        # self.pool = ops.avg_pool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), divisor_override=None, pad_mode='pad')
 
     def construct(self, x):
         out = self.conv(x)

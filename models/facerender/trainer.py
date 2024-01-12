@@ -135,21 +135,21 @@ class TrainOneStepCell(nn.Cell):
 
         self.reducer_flag = False
         self.grad_reducer = None
-        self.parallel_mode = context.get_auto_parallel_context("parallel_mode")
-        if self.parallel_mode in [
-            ParallelMode.DATA_PARALLEL,
-            ParallelMode.HYBRID_PARALLEL,
-        ]:
-            self.reducer_flag = True
-        if self.reducer_flag:
-            mean = context.get_auto_parallel_context("gradients_mean")
-            if auto_parallel_context().get_device_num_is_set():
-                degree = context.get_auto_parallel_context("device_num")
-            else:
-                degree = get_group_size()
-            self.grad_reducer = nn.DistributedGradReducer(
-                optimizer.parameters, mean, degree
-            )
+        # self.parallel_mode = context.get_auto_parallel_context("parallel_mode")
+        # if self.parallel_mode in [
+        #     ParallelMode.DATA_PARALLEL,
+        #     ParallelMode.HYBRID_PARALLEL,
+        # ]:
+        #     self.reducer_flag = True
+        # if self.reducer_flag:
+        #     mean = context.get_auto_parallel_context("gradients_mean")
+        #     if auto_parallel_context().get_device_num_is_set():
+        #         degree = context.get_auto_parallel_context("device_num")
+        #     else:
+        #         degree = get_group_size()
+        #     self.grad_reducer = nn.DistributedGradReducer(
+        #         optimizer.parameters, mean, degree
+        #     )
 
 
 class GTrainOneStepCell(TrainOneStepCell):
@@ -314,6 +314,7 @@ class GWithLossCell(nn.Cell):
         value_depth = ops.abs(kp_mean_depth - self.zt).mean()  # set Zt = 0.33
 
         loss_kp += value_depth
+        # loss_kp = 0.0
 
         # Headpose loss
         source_224 = ops.interpolate(
@@ -343,6 +344,7 @@ class GWithLossCell(nn.Cell):
         # Deformation prior loss
         exp_driving = he_driving[-1]
         loss_deform = ops.norm(exp_driving, ord=1, dim=-1).mean()
+        # loss_deform = 0.0
 
         # Keypoint unsupervised loss
         he_source_vid2vid = self.he_estimator(source_image)
@@ -350,11 +352,12 @@ class GWithLossCell(nn.Cell):
             kp_canonical, he_source_vid2vid
         )
         loss_vid2vid = ops.abs(kp_vid2vid - kp_source).sum(axis=-1).mean()
+        # loss_vid2vid = 0.0
 
         loss_g = (
             1.0 * loss_adversarial
             + 10.0 * loss_perceptual
-            + 20.0 * loss_eqv  # TODO!!
+            + 20.0 * loss_eqv
             + 10.0 * loss_kp
             + 20.0 * loss_headpose
             + 5.0 * loss_deform

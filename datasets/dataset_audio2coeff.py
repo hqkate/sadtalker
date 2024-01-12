@@ -118,7 +118,7 @@ class TestDataset:
 
         else:
             self.audios = [args.driven_audio]
-            self.src_images = [self.source_image]
+            self.src_images = [args.source_image]
 
     def crop_and_extract(self, source_image):
         os.makedirs(self.first_frame_dir, exist_ok=True)

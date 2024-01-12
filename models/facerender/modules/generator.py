@@ -30,6 +30,7 @@ class SPADEDecoder(nn.Cell):
         self.up = nn.Upsample(scale_factor=2.0, mode="area")
 
     def construct(self, feature):
+        import pdb; pdb.set_trace()
         seg = feature
         x = self.fc(feature)
         x = self.G_middle_0(x, seg)
@@ -38,6 +39,7 @@ class SPADEDecoder(nn.Cell):
         x = self.G_middle_3(x, seg)
         x = self.G_middle_4(x, seg)
         x = self.G_middle_5(x, seg)
+        import pdb; pdb.set_trace()
         x = self.up(x)
         x = self.up_0(x, seg)  # 256, 128, 128
         x = self.up(x)
@@ -77,6 +79,8 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
 
         else:
             self.dense_motion_network = None
+
+        # self.dense_motion_network = None
 
         self.first = SameBlock2d(
             image_channel, block_expansion, kernel_size=(3, 3), padding=(1, 1, 1, 1)
@@ -142,39 +146,39 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
     def construct(self, source_image, kp_driving, kp_source):
         # Encoding (downsampling) part
         out = self.first(source_image)
-        # for i in range(len(self.down_blocks)):
-        #     out = self.down_blocks[i](out)
         out = self.down_blocks(out)
         out = self.second(out)
-        bs, c, h, w = out.shape
-        # print(out.shape)
-        feature_3d = out.view(bs, self.reshape_channel, self.reshape_depth, h, w)
-        feature_3d = self.resblocks_3d(feature_3d)
 
         # Transforming feature representation according to deformation and occlusion
         if self.dense_motion_network is not None:
+
+            bs, c, h, w = out.shape # (2, 512, 64, 64)
+            # print(out.shape)
+            feature_3d = out.view(bs, self.reshape_channel, self.reshape_depth, h, w)
+            feature_3d = self.resblocks_3d(feature_3d)
+
             _, dense_motion_deform, occlusion_map  = self.dense_motion_network(
                 feature=feature_3d, kp_driving=kp_driving, kp_source=kp_source
             )
 
-            out = self.deform_input(feature_3d, dense_motion_deform)
+            # out = self.deform_input(feature_3d, dense_motion_deform)
+            out = ops.grid_sample(feature_3d, dense_motion_deform)
 
             bs, c, d, h, w = out.shape
             out = out.view(bs, c * d, h, w)
+
             out = self.third(out)
             out = self.fourth(out)
 
-            # occlusion_map = torch.where(occlusion_map < 0.95, 0, occlusion_map)
-
-            if occlusion_map is not None:
-                if (
-                    out.shape[2] != occlusion_map.shape[2]
-                    or out.shape[3] != occlusion_map.shape[3]
-                ):
-                    occlusion_map = ops.interpolate(
-                        occlusion_map, size=out.shape[2:], mode="bilinear"
-                    )
+            if self.estimate_occlusion_map:
+                occlusion_map = ops.interpolate(
+                    occlusion_map, size=out.shape[2:], mode="bilinear"
+                )
                 out = out * occlusion_map
+
+        else:
+            out = self.third(out)
+            out = self.fourth(out)
 
         # Decoding part
         out = self.decoder(out)

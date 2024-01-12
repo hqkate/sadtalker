@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import mindspore as ms
 from mindspore import nn, ops
 from models.audio2pose.cvae import CVAE
@@ -66,7 +67,7 @@ class Audio2Pose(nn.Cell):
         pose_motion_pred_list = [
             ops.zeros(batch['ref'].unsqueeze(1).shape, dtype=batch['ref'].dtype)]
 
-        for i in range(div):
+        for i in tqdm(range(div), 'audio2pose:'):
             z = ops.randn(bs, self.latent_dim)
             # z = ops.zeros((bs, self.latent_dim), ms.float32) # for debug
             batch['z'] = z

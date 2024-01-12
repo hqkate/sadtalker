@@ -143,21 +143,21 @@ class FPN(nn.Cell):
         # names = list(input.keys())
         # input = list(input.values())
 
-        output1 = self.output1(input[0])
-        output2 = self.output2(input[1])
-        output3 = self.output3(input[2])
+        out1 = self.output1(input[0])
+        out2 = self.output2(input[1])
+        out3 = self.output3(input[2])
 
         up3 = ops.interpolate(
-            output3, size=[output2.shape[2], output2.shape[3]], mode='nearest')
-        output2 = output2 + up3
-        output2 = self.merge2(output2)
+            out3, size=[out2.shape[2], out2.shape[3]], mode='nearest')
+        out2 = out2 + up3
+        out2 = self.merge2(out2)
 
         up2 = ops.interpolate(
-            output2, size=[output1.shape[2], output1.shape[3]], mode='nearest')
-        output1 = output1 + up2
-        output1 = self.merge1(output1)
+            out2, size=[out1.shape[2], out1.shape[3]], mode='nearest')
+        out1 = out1 + up2
+        out1 = self.merge1(out1)
 
-        out = [output1, output2, output3]
+        out = [out1, out2, out3]
         return out
 
 
