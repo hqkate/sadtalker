@@ -57,9 +57,9 @@ def make_coordinate_grid(spatial_size, type=None):
     y = ops.arange(h)
     z = ops.arange(d)
 
-    x = 2.0 * (x.div(w - 1.0)) - 1.0
-    y = 2.0 * (y.div(h - 1.0)) - 1.0
-    z = 2.0 * (z.div(d - 1.0)) - 1.0
+    x = 2.0 * (x / (w - 1.0)) - 1.0
+    y = 2.0 * (y / (h - 1.0)) - 1.0
+    z = 2.0 * (z / (d - 1.0)) - 1.0
 
     yy = y.view(1, -1, 1).repeat(d, axis=0).repeat(w, axis=2)
     xx = x.view(1, 1, -1).repeat(d, axis=0).repeat(h, axis=1)
@@ -96,6 +96,9 @@ class ResBlock3d(nn.Cell):
         self.norm1 = BatchNorm3d(in_features, affine=True)
         self.norm2 = BatchNorm3d(in_features, affine=True)
 
+        self.conv1.to_float(ms.float16)
+        self.conv2.to_float(ms.float16)
+
     def construct(self, x):
         out = self.norm1(x)
         out = ops.relu(out)
@@ -103,7 +106,7 @@ class ResBlock3d(nn.Cell):
         out = self.norm2(out)
         out = ops.relu(out)
         out = self.conv2(out)
-        out += x
+        out = out + x
         return out
 
 
@@ -150,6 +153,7 @@ class UpBlock3d(nn.Cell):
             group=groups,
             has_bias=True,
         )
+        self.conv.to_float(ms.float16)
         self.norm = BatchNorm3d(out_features, affine=True)
 
     def construct(self, x):
@@ -213,6 +217,7 @@ class DownBlock3d(nn.Cell):
             has_bias=True,
         )
         self.norm = BatchNorm3d(out_features, affine=True)
+        self.conv.to_float(ms.float16)
         # self.pool = nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), pad_mode='pad')
         # self.pool = ops.avg_pool3d(kernel_size=(1, 2, 2), stride=(1, 2, 2), divisor_override=None, pad_mode='pad')
 
@@ -282,6 +287,7 @@ class Decoder(nn.Cell):
             has_bias=True,
         )
         self.norm = BatchNorm3d(self.out_filters, affine=True)
+        self.conv.to_float(ms.float16)
 
     def construct(self, x):
         out = x[-1]
@@ -565,7 +571,8 @@ class AntiAliasInterpolation2d(nn.Cell):
         if self.scale == 1.0:
             return input
 
-        out = ops.pad(input, (self.ka, self.kb, self.ka, self.kb))
+        # out = ops.pad(input, (self.ka, self.kb, self.ka, self.kb))
+        out = ops.Pad(((0, 0), (0, 0), (self.ka, self.ka), (self.kb, self.kb)))(input)
         out = ops.conv2d(out, weight=self.weight, groups=self.groups)
         out = out[:, :, :: self.int_inv_scale, :: self.int_inv_scale]
 

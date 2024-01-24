@@ -49,6 +49,7 @@ class KPDetector(nn.Cell):
             padding=1,
             has_bias=True,
         )
+        self.kp.to_float(ms.float16)
 
         if estimate_jacobian:
             self.num_jacobian_maps = 1 if single_jacobian_map else num_kp

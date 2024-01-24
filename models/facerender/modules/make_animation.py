@@ -201,6 +201,7 @@ def make_animation(
         kp_driving = keypoint_transformation(kp_canonical, he_driving, yaw_in=yaw_in, pitch_in=pitch_in, roll_in=roll_in)
 
         out = generator(source_image, kp_source=kp_source, kp_driving=kp_driving)
+
         """
         source_image_new = out['prediction'].squeeze(1)
         kp_canonical_new =  kp_detector(source_image_new)

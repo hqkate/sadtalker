@@ -78,8 +78,6 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
         else:
             self.dense_motion_network = None
 
-        # self.dense_motion_network = None
-
         self.first = SameBlock2d(
             image_channel, block_expansion, kernel_size=(3, 3), padding=(1, 1, 1, 1)
         )
@@ -155,11 +153,12 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
             feature_3d = out.view(bs, self.reshape_channel, self.reshape_depth, h, w)
             feature_3d = self.resblocks_3d(feature_3d)
 
-            _, dense_motion_deform, occlusion_map  = self.dense_motion_network(
+            _, dense_motion_deform, occlusion_map = self.dense_motion_network(
                 feature=feature_3d, kp_driving=kp_driving, kp_source=kp_source
             )
 
-            # out = self.deform_input(feature_3d, dense_motion_deform)
+            out = self.deform_input(feature_3d, dense_motion_deform)
+            dense_motion_deform = dense_motion_deform.astype(ms.float16)
             out = ops.grid_sample(feature_3d, dense_motion_deform)
 
             bs, c, d, h, w = out.shape

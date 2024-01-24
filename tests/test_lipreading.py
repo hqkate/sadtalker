@@ -232,8 +232,6 @@ def main():
     ms.load_param_into_net(model, param_dict)
     model.set_train(False)
 
-    import pdb; pdb.set_trace()
-
     B = 84
     # input_np = np.random.rand(B, 1, 29, 88, 88)
     input_np = np.random.rand(B, 1, 640)

@@ -42,7 +42,7 @@ class Audio2Exp(nn.Cell):
             curr_exp_coeff_pred = self.netG(
                 audiox, ref, ratio)         # bs T 64
 
-            exp_coeff_pred += [curr_exp_coeff_pred]
+            exp_coeff_pred = exp_coeff_pred + [curr_exp_coeff_pred]
 
         # BS x T x 64
         results_dict = {
@@ -97,7 +97,7 @@ class Audio2Exp(nn.Cell):
                 curr_exp_coeff_pred = self.netG(
                     audiox, curr_ref, ratio)         # bs T 64
 
-                exp_coeff_pred += [curr_exp_coeff_pred]
+                exp_coeff_pred = exp_coeff_pred + [curr_exp_coeff_pred]
 
                 # wav2lip
                 img_with_lip = self.wav2lip(
@@ -105,7 +105,7 @@ class Audio2Exp(nn.Cell):
                 full_coeff = self.coeff_enc(img_with_lip)
                 coeffs = split_coeff(full_coeff)
                 exp_coeffs = coeffs['exp']
-                wav2lip_coeff += [exp_coeffs]
+                wav2lip_coeff = wav2lip_coeff + [exp_coeffs]
 
                 # reconstruct coeffs
                 landmarks = self.bfm.compute_for_render_landmarks(coeffs)

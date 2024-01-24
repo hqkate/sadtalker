@@ -54,7 +54,7 @@ class Encoder(nn.Cell):
         self.seq_len = seq_len
 
         self.mlp = nn.SequentialCell()
-        layer_sizes[0] += latent_size + seq_len * audio_emb_out_size + 6
+        layer_sizes[0] = layer_sizes[0] + latent_size + seq_len * audio_emb_out_size + 6
         for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
             self.mlp.append(nn.Dense(in_size, out_size))
             self.mlp.append(nn.ReLU())

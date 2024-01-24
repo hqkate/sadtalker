@@ -66,7 +66,7 @@ class BasicBlock(nn.Cell):
         if self.downsample is not None:
             residual = self.downsample(x)
 
-        out += residual
+        out = out + residual
         out = self.relu2(out)
 
         return out

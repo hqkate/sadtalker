@@ -1,3 +1,4 @@
+import mindspore as ms
 from mindspore import nn, ops
 from models.facerender.modules.utils import Hourglass, make_coordinate_grid, kp2gaussian
 
@@ -56,6 +57,8 @@ class DenseMotionNetwork(nn.Cell):
             self.occlusion = None
 
         self.num_kp = num_kp
+        self.mask.to_float(ms.float16)
+        self.compress.to_float(ms.float16)
 
     def create_sparse_motions(self, feature, kp_driving, kp_source):
 
@@ -132,6 +135,7 @@ class DenseMotionNetwork(nn.Cell):
             deformed_feature, kp_driving, kp_source
         ) # (2, 16, 1, 16, 64, 64)
 
+        heatmap = heatmap.astype(ms.float16)
         input_ = ops.cat([heatmap, deformed_feature], axis=2)
         input_ = input_.view(bs, -1, d, h, w)
 
@@ -140,7 +144,9 @@ class DenseMotionNetwork(nn.Cell):
         prediction = self.hourglass(input_) # (2, 112, 16, 64, 64)
 
         mask = self.mask(prediction) # (2, 16, 16, 64, 64)
-        mask = ops.softmax(mask, axis=1)
+        # mask = ops.softmax(mask, axis=1)
+        mbs, mc, md, mh, mw = mask.shape
+        mask = ops.softmax(mask.view(mbs, mc, -1), axis=1).view(mbs, mc, md, mh, mw)
         # out_dict["mask"] = mask
         # (bs, num_kp+1, 1, d, h, w)
         mask = mask.unsqueeze(2)
