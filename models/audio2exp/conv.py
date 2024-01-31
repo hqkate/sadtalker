@@ -56,9 +56,10 @@ class Conv2dTranspose(nn.Cell):
         self.conv_block = nn.SequentialCell(
             nn.Conv2dTranspose(
                 cin, cout, kernel_size, stride,
-                pad_mode=pad_mode, padding=padding, output_padding=output_padding, has_bias=True
+                pad_mode=pad_mode, padding=padding,
+                output_padding=output_padding, has_bias=True
             ),
-            nn.BatchNorm2d(cout)
+            nn.BatchNorm2d(cout, momentum=0.9)
         )
 
         self.act = nn.ReLU()

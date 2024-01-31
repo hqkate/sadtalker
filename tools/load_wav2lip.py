@@ -1,6 +1,6 @@
 import mindspore as ms
 from mindspore import context
-from models.audio2exp.wav2lip import Wav2Lip
+from models.wav2lip.wav2lip import Wav2Lip
 
 
 def save_params(model, out_path):

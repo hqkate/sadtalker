@@ -11,7 +11,7 @@ from datasets.generate_batch import get_data
 from datasets.dataset_wrapper import DatasetWrapper
 from utils.preprocess import CropAndExtract
 from models.audio2exp.expnet import ExpNet
-from models.audio2exp.wav2lip import Wav2Lip
+from models.wav2lip.wav2lip import Wav2Lip
 from models.audio2exp.audio2exp import Audio2Exp
 from argparse import ArgumentParser
 from models.face3d.networks import define_net_recon

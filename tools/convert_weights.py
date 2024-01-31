@@ -294,7 +294,7 @@ def convert_parsing():
 
 
 def convert_wav2lip():
-    from models.audio2exp.wav2lip import Wav2Lip
+    from models.wav2lip.wav2lip import Wav2Lip
 
     model = Wav2Lip()
     ms_params = model.get_parameters()

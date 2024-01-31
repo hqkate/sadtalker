@@ -190,7 +190,7 @@ class RetinaFace(nn.Cell):
         # convert to torch.tensor format
         # image -= (104, 117, 123)
         image = image.transpose(2, 0, 1)
-        image = ms.Tensor.from_numpy(image).unsqueeze(0)
+        image = ms.Tensor(image).unsqueeze(0)
 
         return image, resize
 
@@ -200,6 +200,7 @@ class RetinaFace(nn.Cell):
         conf_threshold=0.8,
         nms_threshold=0.4,
         use_origin_size=True,
+        return_landm=True,
     ):
 
         image, self.resize = self.transform(image, use_origin_size)
@@ -235,7 +236,10 @@ class RetinaFace(nn.Cell):
         keep = py_cpu_nms(bounding_boxes, nms_threshold)
         bounding_boxes, landmarks = bounding_boxes[keep, :], landmarks[keep]
 
-        return np.concatenate((bounding_boxes, landmarks), axis=1)
+        if return_landm:
+            return np.concatenate((bounding_boxes, landmarks), axis=1)
+        else:
+            return bounding_boxes
 
     def __align_multi(self, image, boxes, landmarks, limit=None):
 
