@@ -88,7 +88,7 @@ def read_filelist(input_path):
     return audios, images
 
 
-class TestDataset:
+class AudioCoeffDataset:
     def __init__(
         self,
         args,
@@ -111,14 +111,6 @@ class TestDataset:
         self.idlemode = idlemode
         self.length_of_audio = length_of_audio
         self.use_blink = use_blink
-
-        # read files
-        if args.train_list is not None:
-            self.audios, self.src_images = read_filelist(args.train_list)
-
-        else:
-            self.audios = [args.driven_audio]
-            self.src_images = [args.source_image]
 
     def crop_and_extract(self, source_image):
         os.makedirs(self.first_frame_dir, exist_ok=True)
@@ -179,20 +171,21 @@ class TestDataset:
             ref_pose_coeff_path,
         )
 
-    def __next__(self):
-        if self._index >= len(self.audios):
-            raise StopIteration
-        else:
-            item = self.__getitem__(self._index)
-            self._index += 1
-            return item
+    def get_output_columns(self):
+        return [
+            "indiv_mels",
+            "ref",
+            "num_frames",
+            "ratio_gt",
+            "audio_name",
+            "pic_name",
+            "ref_pose_coeff_path",
+            "first_coeff_path",
+            "crop_pic_path",
+            "crop_info",
+        ]
 
-    def __len__(self):
-        return len(self.audios)
-
-    def __getitem__(self, idx):
-        image = self.src_images[idx]
-        driven_audio = self.audios[idx]
+    def process_data(self, image_path, audio_path):
 
         # 1. crop and extract 3dMM coefficients
         (
@@ -201,17 +194,17 @@ class TestDataset:
             crop_info,
             ref_eyeblink_coeff_path,
             ref_pose_coeff_path,
-        ) = self.crop_and_extract(image)
+        ) = self.crop_and_extract(image_path)
 
         # 2. process audio
-        pic_name = os.path.splitext(os.path.split(image)[-1])[0]
-        audio_name = os.path.splitext(os.path.split(driven_audio)[-1])[0]
+        pic_name = os.path.splitext(os.path.split(image_path)[-1])[0]
+        audio_name = os.path.splitext(os.path.split(audio_path)[-1])[0]
 
         if self.idlemode:
             num_frames = int(self.length_of_audio * self.fps)
             indiv_mels = np.zeros((num_frames, num_frames, self.syncnet_mel_step_size))
         else:
-            wav = audio.load_wav(driven_audio, 16000)
+            wav = audio.load_wav(audio_path, 16000)
             wav_length, num_frames = parse_audio_length(len(wav), 16000, self.fps)
             wav = crop_pad_audio(wav, wav_length)
             orig_mel = audio.melspectrogram(wav).T
@@ -276,3 +269,49 @@ class TestDataset:
             "crop_pic_path": crop_pic_path,
             "crop_info": crop_info,
         }
+
+
+class TrainAudioCoeffDataset(AudioCoeffDataset):
+    def __init__(
+        self,
+        args,
+        preprocessor,
+        save_dir,
+        syncnet_mel_step_size=16,
+        fps=25,
+        idlemode=False,
+        length_of_audio=False,
+        use_blink=True,
+    ):
+        super().__init__(
+            args=args,
+            preprocessor=preprocessor,
+            save_dir=save_dir,
+            syncnet_mel_step_size=syncnet_mel_step_size,
+            fps=fps,
+            idlemode=idlemode,
+            length_of_audio=length_of_audio,
+            use_blink=use_blink,
+        )
+
+        self.audios, self.images = read_filelist(args.train_list)
+
+    def __next__(self):
+        if self._index >= len(self.all_videos):
+            raise StopIteration
+        else:
+            item = self.__getitem__(self._index)
+            self._index += 1
+            return item
+
+    def __len__(self):
+        return len(self.audios)
+
+    def __getitem__(self, idx):
+        image_path = self.images[idx]
+        audio_path = self.audios[idx]
+        data_dict = self.process_data(image_path, audio_path)
+
+        output_tuple = tuple(data_dict[k] for k in self.get_output_columns())
+
+        return output_tuple

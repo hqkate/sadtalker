@@ -5,7 +5,10 @@ A Mindspore implementation of SadTalker based on its [original github](https://g
 ## Introduction
 SadTalker is a novel system for a stylized audio-driven single image talking head videos animation using the generated realistic 3D motion coefficients (head pose, expression) of the 3DMM.
 
-![sadtalker_1](https://github.com/hqkate/sadtalker/assets/26082447/f1239f9f-f434-4b2c-8ed0-3f07287eb7f3)
+<p float="center">
+<img src="https://github.com/hqkate/sadtalker/assets/26082447/f1239f9f-f434-4b2c-8ed0-3f07287eb7f3" alt="SadTalker main pipeline." width="50%"/>
+</p>
+
 
 
 ## Installation

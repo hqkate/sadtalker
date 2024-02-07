@@ -138,15 +138,11 @@ class Transform:
         return jacobian
 
 
-class TestFaceRenderDataset:
+class FaceRenderDataset:
     def __init__(
         self,
         args,
         config,
-        coeff_path,
-        pic_path,
-        first_coeff_path,
-        audio_path,
         batch_size,
         expression_scale=1.0,
         still_mode=False,
@@ -156,10 +152,6 @@ class TestFaceRenderDataset:
     ) -> None:
         self.args = args
         self.cfg = config
-        self.coeff_path = coeff_path
-        self.pic_path = pic_path
-        self.first_coeff_path = first_coeff_path
-        self.audio_path = audio_path
         self.batch_size = batch_size
         self.expression_scale = expression_scale
         self.still_mode = still_mode
@@ -281,18 +273,7 @@ class TestFaceRenderDataset:
 
         return frame_num, target_semantics_ts, target_image_ts
 
-    def __next__(self):
-        if self._index >= 1:
-            raise StopIteration
-        else:
-            item = self.__getitem__(self._index)
-            self._index += 1
-            return item
-
-    def __len__(self):
-        return 1
-
-    def __getitem__(self, idx):
+    def process_data(self, image_path, audio_path, first_coeff_path, coeff_path):
         data = {}
 
         # source
@@ -300,22 +281,22 @@ class TestFaceRenderDataset:
             source_image_ts,
             source_semantics,
             source_semantics_ts,
-            source_image_binary,
-        ) = self.prepare_source_features(self.pic_path, self.first_coeff_path)
+            _,
+        ) = self.prepare_source_features(image_path, first_coeff_path)
         data["source_image"] = source_image_ts
         data["source_semantics"] = source_semantics_ts
 
         # target
         frame_num, target_semantics_ts, _ = self.prepare_target_features(
-            self.coeff_path, source_semantics
+            coeff_path, source_semantics
         )
 
-        video_name = os.path.splitext(os.path.split(self.coeff_path)[-1])[0]
+        video_name = os.path.splitext(os.path.split(coeff_path)[-1])[0]
 
         data["target_semantics"] = target_semantics_ts
         data["frame_num"] = frame_num
         data["video_name"] = video_name
-        data["audio_path"] = self.audio_path
+        data["audio_path"] = audio_path
 
         input_yaw_list = self.args.input_yaw
         input_pitch_list = self.args.input_pitch
@@ -334,7 +315,7 @@ class TestFaceRenderDataset:
         return data
 
 
-class TrainFaceRenderDataset(TestFaceRenderDataset):
+class TrainFaceRenderDataset(FaceRenderDataset):
     def __init__(
         self,
         args,
@@ -353,10 +334,6 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
             args,
             config,
             batch_size=batch_size,
-            coeff_path=None,
-            pic_path=None,
-            first_coeff_path=None,
-            audio_path=None,
             expression_scale=expression_scale,
             still_mode=still_mode,
             preprocess=preprocess,
@@ -376,7 +353,7 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
             "frame_num",
         ]
 
-        #transform for equivariance loss
+        # transform for equivariance loss
         self.equi_transform = Transform(batch_size, **config.facerender.train.transform_params)
 
     def get_output_columns(self):
@@ -414,9 +391,9 @@ class TrainFaceRenderDataset(TestFaceRenderDataset):
         data = {}
 
         img_folder, first_coeff_path, net_coeff_path = self.all_videos[idx].split(" ")
-        image_paths = glob(os.path.join(img_folder, "*.png"))  # 图像的路径
+        image_paths = glob(os.path.join(img_folder, "*.png"))
 
-        ##随机选取一帧,得到窗口并读取图片
+        # randomly select a frame, get the window and read the picture
         valid_paths = list(sorted(image_paths))[: len(image_paths) - self.syncnet_T]
         src_img_path = valid_paths[0]
         tgt_img_path = random.choice(valid_paths)  # 随机选取一帧
