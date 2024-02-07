@@ -6,9 +6,13 @@ A Mindspore implementation of SadTalker based on its [original github](https://g
 SadTalker is a novel system for a stylized audio-driven single image talking head videos animation using the generated realistic 3D motion coefficients (head pose, expression) of the 3DMM.
 
 <p align="center">
-<img src="https://github.com/hqkate/sadtalker/assets/26082447/f1239f9f-f434-4b2c-8ed0-3f07287eb7f3" title="SadTalker main pipeline." width="50%"/>
-</p>
+<img src="https://github.com/hqkate/sadtalker/assets/26082447/d9d3b2d5-1e80-4304-84b4-768ce2b9814c" title="SadTalke" width="50%"/>
 
+<br>
+<b>TL;DR: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; single portrait image 🙎‍♂️  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; audio 🎤  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; talking head video 🎞.</b>
+<br>
+
+</p>
 
 ## Installation
 
@@ -80,7 +84,6 @@ As reference, you can run the following commands to execute inference process. T
 python inference.py --config ./config/sadtalker.yaml --source_image examples/source_image/people_0.png --driven_audio examples/driven_audio/imagine.wav
 ```
 
-## Examples
 Here are some generated videos with different inputs:
 
 | Chinese audio + full character image   | English audio + full character image       |   Singing audio + character image with cropping preprocessing |
