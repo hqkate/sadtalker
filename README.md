@@ -5,8 +5,14 @@ A Mindspore implementation of SadTalker based on its [original github](https://g
 ## Introduction
 SadTalker is a novel system for a stylized audio-driven single image talking head videos animation using the generated realistic 3D motion coefficients (head pose, expression) of the 3DMM.
 
-![sadtalker_1](https://github.com/hqkate/sadtalker/assets/26082447/f1239f9f-f434-4b2c-8ed0-3f07287eb7f3)
+<p align="center">
+<img src="https://github.com/hqkate/sadtalker/assets/26082447/d9d3b2d5-1e80-4304-84b4-768ce2b9814c" title="SadTalke" width="50%"/>
 
+<br>
+<b>TL;DR: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; single portrait image 🙎‍♂️  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; audio 🎤  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; talking head video 🎞.</b>
+<br>
+
+</p>
 
 ## Installation
 
@@ -78,31 +84,8 @@ As reference, you can run the following commands to execute inference process. T
 python inference.py --config ./config/sadtalker.yaml --source_image examples/source_image/people_0.png --driven_audio examples/driven_audio/imagine.wav
 ```
 
-## Examples
-1. Chinese
+Here are some generated videos with different inputs:
 
-
-https://github.com/hqkate/sadtalker/assets/26082447/fc20924f-9d42-4432-8f7a-2f8094c23662
-
-
-2. English
-
-https://github.com/hqkate/sadtalker/assets/26082447/a2ecbf7d-cde4-4fb7-b6d4-6301b679e75b
-
-3. Singing
-
-https://github.com/hqkate/sadtalker/assets/26082447/2c713067-f64e-45a7-9ce2-bc57f340bdad
-
-4. Reference (videos by Pytorch)
-
-- PyTorch with `SynchronizedBatchNorm`:
-
-https://github.com/hqkate/sadtalker/assets/26082447/3de109c8-7231-42c6-9b3d-f150ecd251fa
-
-
-- PyTorch with `nn.BatchNorm`:
-
-https://github.com/hqkate/sadtalker/assets/26082447/731afe73-e69f-47b4-8e36-6da7be308046
-
-
-https://github.com/hqkate/sadtalker/assets/26082447/34071866-af30-4520-99d2-fd5a3262f976
+| Chinese audio + full character image   | English audio + full character image       |   Singing audio + character image with cropping preprocessing |
+|:--------------------: |:--------------------: | :----: |
+| <video  src="https://github.com/hqkate/sadtalker/assets/26082447/fc20924f-9d42-4432-8f7a-2f8094c23662" type="video/mp4"> </video> | <video  src="https://github.com/hqkate/sadtalker/assets/26082447/a2ecbf7d-cde4-4fb7-b6d4-6301b679e75b" type="video/mp4"> </video>  | <video src="https://github.com/hqkate/sadtalker/assets/26082447/2c713067-f64e-45a7-9ce2-bc57f340bdad" type="video/mp4"> </video> |
