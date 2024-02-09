@@ -4,15 +4,10 @@ from mindspore import nn, ops
 import mindspore.dataset.vision as vision
 from mindspore.dataset.transforms import Compose
 
-from utils.preprocess import split_coeff
-from models.face3d.bfm import ParametricFaceModel
-from models.lipreading import get_lipreading_model
-from models.external.face3d.face_renderer import renderer
 
+class NormalizeUtterance:
+    """Normalize per raw audio by removing the mean and divided by the standard deviation"""
 
-class NormalizeUtterance():
-    """Normalize per raw audio by removing the mean and divided by the standard deviation
-    """
     def __call__(self, signal):
         signal_std = signal.std()
         signal_mean = signal.mean()
@@ -20,20 +15,24 @@ class NormalizeUtterance():
 
 
 class LandmarksLoss(nn.LossBase):
-    def __init__(self, reduction='mean'):
+    def __init__(self, reduction="mean"):
         super().__init__(reduction)
         self.cast = ops.Cast()
 
     def get_eye_ratio(self, points):
         # (B, 68, 2)
 
-        width = (ops.dist(points[:, 39, :], points[:, 36, :]) +
-                 ops.dist(points[:, 45, :], points[:, 42, :])) / 2.0
+        width = (
+            ops.dist(points[:, 39, :], points[:, 36, :])
+            + ops.dist(points[:, 45, :], points[:, 42, :])
+        ) / 2.0
 
-        height = (ops.dist(points[:, 37, :], points[:, 40, :]) +
-                  ops.dist(points[:, 38, :], points[:, 41, :]) +
-                  ops.dist(points[:, 43, :], points[:, 46, :]) +
-                  ops.dist(points[:, 44, :], points[:, 47, :])) / 4.0
+        height = (
+            ops.dist(points[:, 37, :], points[:, 40, :])
+            + ops.dist(points[:, 38, :], points[:, 41, :])
+            + ops.dist(points[:, 43, :], points[:, 46, :])
+            + ops.dist(points[:, 44, :], points[:, 47, :])
+        ) / 4.0
 
         ratio = ops.div(height, width)
         return ratio  # [B]
@@ -59,10 +58,10 @@ class LandmarksLoss(nn.LossBase):
 
 
 class LipReadingLoss(nn.LossBase):
-    def __init__(self, reduction='mean'):
+    def __init__(self, lipreading_video, lipreading_audio, renderer, reduction="mean"):
         super().__init__(reduction)
-        self.lipreading_video = get_lipreading_model("video")
-        self.lipreading_audio = get_lipreading_model("audio")
+        self.lipreading_video = lipreading_video
+        self.lipreading_audio = lipreading_audio
         self.renderer = renderer
         self.celoss = nn.CrossEntropyLoss()
 
@@ -77,32 +76,43 @@ class LipReadingLoss(nn.LossBase):
         std = 0.165
 
         # ---- transform mouths before going into the lipread network for loss ---- #
-        self.mouth_transform = Compose([
-            vision.Normalize([0.0], [1.0]),
-            vision.CenterCrop(crop_size),
-            vision.Normalize([mean], [std]),
+        self.mouth_transform = Compose(
+            [
+                vision.Normalize([0.0], [1.0]),
+                vision.CenterCrop(crop_size),
+                vision.Normalize([mean], [std]),
             ]
         )
 
     def cut_mouth(self, images, landmarks, convert_grayscale=True):
-        """ function adapted from https://github.com/mpc001/Visual_Speech_Recognition_for_Multiple_Languages"""
+        """function adapted from https://github.com/mpc001/Visual_Speech_Recognition_for_Multiple_Languages"""
 
         mouth_sequence = []
         # landmarks = landmarks * 112 + 112
-        converter = vision.ConvertColor(vision.ConvertMode.COLOR_RGB2GRAY) # TODO: support CPU only
+        converter = vision.ConvertColor(
+            vision.ConvertMode.COLOR_RGB2GRAY
+        )  # TODO: support CPU only
 
         for frame_idx, frame in enumerate(images):
-            window_margin = min(self._window_margin // 2, frame_idx, len(landmarks) - 1 - frame_idx)
-            smoothed_landmarks = landmarks[frame_idx-window_margin:frame_idx + window_margin + 1].mean(axis=0)
-            smoothed_landmarks += landmarks[frame_idx].mean(axis=0) - smoothed_landmarks.mean(axis=0)
+            window_margin = min(
+                self._window_margin // 2, frame_idx, len(landmarks) - 1 - frame_idx
+            )
+            smoothed_landmarks = landmarks[
+                frame_idx - window_margin : frame_idx + window_margin + 1
+            ].mean(axis=0)
+            smoothed_landmarks += landmarks[frame_idx].mean(
+                axis=0
+            ) - smoothed_landmarks.mean(axis=0)
 
-            center_x, center_y = ops.mean(smoothed_landmarks[self._start_idx:self._stop_idx], axis=0)
+            center_x, center_y = ops.mean(
+                smoothed_landmarks[self._start_idx : self._stop_idx], axis=0
+            )
 
             center_x = center_x.round()
             center_y = center_y.round()
 
-            height = self._crop_height//2
-            width = self._crop_width//2
+            height = self._crop_height // 2
+            width = self._crop_width // 2
 
             threshold = 5
 
@@ -115,22 +125,26 @@ class LipReadingLoss(nn.LossBase):
             if center_y - height < 0:
                 center_y = height
             if center_y - height < 0 - threshold:
-                raise Exception('too much bias in height')
+                raise Exception("too much bias in height")
             if center_x - width < 0:
                 center_x = width
             if center_x - width < 0 - threshold:
-                raise Exception('too much bias in width')
+                raise Exception("too much bias in width")
 
             if center_y + height > img.shape[-2]:
                 center_y = img.shape[-2] - height
             if center_y + height > img.shape[-2] + threshold:
-                raise Exception('too much bias in height')
+                raise Exception("too much bias in height")
             if center_x + width > img.shape[-1]:
                 center_x = img.shape[-1] - width
             if center_x + width > img.shape[-1] + threshold:
-                raise Exception('too much bias in width')
+                raise Exception("too much bias in width")
 
-            mouth = img[..., int(center_y - height): int(center_y + height), int(center_x - width): int(center_x + round(width))]
+            mouth = img[
+                ...,
+                int(center_y - height) : int(center_y + height),
+                int(center_x - width) : int(center_x + round(width)),
+            ]
 
             mouth_sequence.append(ms.Tensor(mouth, ms.float32))
 
@@ -151,8 +165,10 @@ class LipReadingLoss(nn.LossBase):
         and then calculate the cosine distance of features
         """
 
-        mouths_pred = self.cut_mouth(pred_faces, landmarks).unsqueeze(-1) # (84, 96, 96, 1)
-        mouths_pred = self.mouth_transform(mouths_pred.asnumpy()) # (84, 88, 88, 1)
+        mouths_pred = self.cut_mouth(pred_faces, landmarks).unsqueeze(
+            -1
+        )  # (84, 96, 96, 1)
+        mouths_pred = self.mouth_transform(mouths_pred.asnumpy())  # (84, 88, 88, 1)
 
         # ---- resize back to Bx1xKxHxW (grayscale input for lipread net) ---- #
         # (bs, color channel-grey scale, seq-length, width, height)
@@ -161,31 +177,35 @@ class LipReadingLoss(nn.LossBase):
 
         return mouths_pred
 
-    def construct(self, audio_wav, face_vertex, face_color, triangle_coeffs, face_proj, landmarks):
-
+    def construct(
+        self, audio_wav, face_vertex, face_color, triangle_coeffs, face_proj, landmarks
+    ):
         # face rendering
         pred_faces = []
         for i in range(len(face_vertex)):
             pred_face = self.renderer(
                 face_vertex[i, :, :].asnumpy(),
                 face_color[i, :, :].asnumpy(),
-                triangle_coeffs.asnumpy()
+                triangle_coeffs.asnumpy(),
             )
             pred_face = ms.Tensor(pred_face, ms.float32)
             pred_faces.append(pred_face.unsqueeze(0))
 
-        pred_faces = ops.cat(pred_faces) # (84, 256, 256, 3)
+        pred_faces = ops.cat(pred_faces)  # (84, 256, 256, 3)
 
         input_tensor = self.preprocess_images(pred_faces, landmarks)
         input_audio = self.preprocess_audio(audio_wav)
 
-        c_p = self.lipreading_audio(input_audio, [640] * len(input_audio)) # (B, 500)
-        c_gt = self.lipreading_video(input_tensor, [640] * len(input_tensor)) # logits (7, 500)
+        c_p = self.lipreading_audio(input_audio, [640] * len(input_audio))  # (B, 500)
+        c_gt = self.lipreading_video(
+            input_tensor, [640] * len(input_tensor)
+        )  # logits (7, 500)
 
         loss = self.celoss(ops.log_softmax(c_p), ops.log_softmax(c_gt))
         return loss
 
 
+"""
 class ExpNetLoss(nn.LossBase):
     def __init__(self, reduction='mean'):
         super().__init__(reduction)
@@ -240,40 +260,4 @@ class ExpNetLoss(nn.LossBase):
         loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
 
         return loss
-
-
-class DebugLoss(nn.LossBase):
-    def __init__(self):
-        super().__init__()
-        self.distill_loss = nn.MSELoss()
-        self.bfm1 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
-        self.bfm2 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
-
-    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt
-                  ):
-
-        # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
-        coeffs = split_coeff(wav2lip_coeff)
-        exp_coeff_wav2lip = coeffs[1]
-        exp_coeff_pred = exp_coeff_pred.view(-1, 64)
-
-        # reconstruct coeffs
-        landmarks_ori = self.bfm1.compute_for_render_landmarks(
-            coeffs)  # bs*T, 68, 2
-
-        new_coeffs = (
-            coeffs[0],
-            exp_coeff_pred,
-            coeffs[2],
-            coeffs[3],
-            coeffs[4],
-            coeffs[5]
-        )
-
-        landmarks_rep = self.bfm2.compute_for_render_landmarks(new_coeffs)
-
-        # distill loss (lip-only coefficients, MSE)
-        loss_distill = self.distill_loss(
-            exp_coeff_pred, exp_coeff_wav2lip)
-
-        return loss_distill
+"""

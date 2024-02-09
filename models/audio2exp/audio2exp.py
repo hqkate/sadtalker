@@ -5,7 +5,6 @@ import numpy as np
 import mindspore as ms
 from mindspore import nn, ops
 from utils.preprocess import split_coeff
-from models.face3d.bfm import ParametricFaceModel
 
 
 class Audio2Exp(nn.Cell):
@@ -50,24 +49,13 @@ class Audio2Exp(nn.Cell):
         }
         return results_dict
 
-    def construct(self, batch):
-        current_mel_input = batch['indiv_mels']
-        curr_ref = batch['ref']
-        ratio = batch['ratio_gt']
-        first_frame_img = batch['first_frame_img']
-        audio_wav = batch['audio_wav']
-
+    def construct(self, current_mel_input, curr_ref, ratio):
         # bs*T 1 80 16
         audiox = current_mel_input.view(-1, 1, 80, 16)
         curr_exp_coeff_pred = self.netG(
             audiox, curr_ref, ratio)         # bs T 64
 
-        # wav2lip
-        img_with_lip = self.wav2lip(
-            audiox, first_frame_img)  # bs*T, 3, 96, 96
-        full_coeff = self.coeff_enc(img_with_lip)
-
-        return (curr_exp_coeff_pred, full_coeff, ratio, audio_wav)
+        return curr_exp_coeff_pred
 
     def construct_old(self, batch):
 

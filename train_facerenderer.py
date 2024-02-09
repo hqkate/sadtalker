@@ -1,11 +1,7 @@
 import os
-import sys
-import shutil
 from time import strftime
 from addict import Dict
 from utils.arg_parser import parse_args_and_config
-
-args, cfg = parse_args_and_config()
 
 import mindspore as ms
 from mindspore import context, nn
@@ -126,5 +122,6 @@ def train(args, config):
 
 
 if __name__ == "__main__":
+    args, cfg = parse_args_and_config()
     config = Dict(cfg)
     train(args, config)

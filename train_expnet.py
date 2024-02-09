@@ -1,334 +1,133 @@
 import os
-import sys
-import shutil
-import cv2
 from time import strftime
-from yacs.config import CfgNode as CN
+from addict import Dict
+from utils.arg_parser import parse_args_and_config
+
 import mindspore as ms
 from mindspore import context, nn
 from mindspore.amp import auto_mixed_precision
-from datasets.generate_batch import get_data
-from datasets.dataset_wrapper import DatasetWrapper
+
 from utils.preprocess import CropAndExtract
+from utils.callbacks import EvalSaveCallback
+from datasets.dataset_audio2coeff import TrainAudioCoeffDataset
+
+from models.face3d.networks import define_net_recon
 from models.audio2exp.expnet import ExpNet
 from models.wav2lip.wav2lip import Wav2Lip
 from models.audio2exp.audio2exp import Audio2Exp
-from argparse import ArgumentParser
-from models.face3d.networks import define_net_recon
-from losses.expnet_loss import ExpNetLoss, DebugLoss
-from utils.model_wrapper import NetWithLossWrapper
-from utils.callbacks import EvalSaveCallback
+from models.audio2exp.trainer import ExpNetWithLossCell, ExpNetTrainer
 
 
-def init_path(
-    checkpoint_dir="./checkpoints/", config_dir="./config/", preprocess="crop"
-):
-    sadtalker_paths = {
-        "wav2lip_checkpoint": os.path.join(checkpoint_dir, "ms/ms_wav2lip.ckpt"),
-        "audio2pose_checkpoint": os.path.join(checkpoint_dir, "ms/ms_audio2pose.ckpt"),
-        "audio2exp_checkpoint": os.path.join(checkpoint_dir, "ms/ms_audio2exp.ckpt"),
-        "path_of_net_recon_model": os.path.join(checkpoint_dir, "ms/ms_net_recon.ckpt"),
-        "dir_of_BFM_fitting": os.path.join(checkpoint_dir, "BFM_Fitting"),
-        "generator_checkpoint": os.path.join(checkpoint_dir, "ms/ms_generator.ckpt"),
-        "kp_extractor_checkpoint": os.path.join(
-            checkpoint_dir, "ms/ms_kp_extractor.ckpt"
-        ),
-        "he_estimator_checkpoint": os.path.join(
-            checkpoint_dir, "ms/ms_he_estimator.ckpt"
-        ),
-    }
-    sadtalker_paths["audio2pose_yaml_path"] = os.path.join(
-        config_dir, "audio2pose.yaml"
-    )
-    sadtalker_paths["audio2exp_yaml_path"] = os.path.join(config_dir, "audio2exp.yaml")
-
-    if "full" in preprocess:
-        sadtalker_paths["mappingnet_checkpoint"] = os.path.join(
-            checkpoint_dir, "ms/ms_mapping_full.ckpt"
-        )
-        sadtalker_paths["facerender_yaml"] = os.path.join(
-            config_dir, "facerender_still.yaml"
-        )
-    else:
-        sadtalker_paths["mappingnet_checkpoint"] = os.path.join(
-            checkpoint_dir, "ms/ms_mapping.ckpt"
-        )
-        sadtalker_paths["facerender_yaml"] = os.path.join(config_dir, "facerender.yaml")
-
-    return sadtalker_paths
-
-
-def main(args):
-    context.set_context(mode=context.GRAPH_MODE, device_target="Ascend", device_id=7)
-    # context.set_context(mode=context.GRAPH_MODE,
-    #                     device_target="CPU", device_id=7)
-
-    pic_path = args.source_image
-    audio_path = args.driven_audio
-    save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))
-    os.makedirs(save_dir, exist_ok=True)
-    pose_style = args.pose_style
-    ref_eyeblink = args.ref_eyeblink
-    ref_pose = args.ref_pose
-
-    current_root_path = os.path.split(sys.argv[0])[0]
-
-    sadtalker_paths = init_path(
-        args.checkpoint_dir, os.path.join(current_root_path, "config"), args.preprocess
-    )
-
-    # init model
-    preprocess_model = CropAndExtract(sadtalker_paths)
-
-    # load audio2exp_model
-    netG = ExpNet()
-    for param in netG.get_parameters():
-        netG.requires_grad = False
-    netG.set_train(False)
-
+def expnet_trainer(audio2exp, optimizer, config):
     # load wav2lip model
     wav2lip = Wav2Lip()
-    param_dict = ms.load_checkpoint(sadtalker_paths["wav2lip_checkpoint"])
+    checkpoint_dir = config.path.checkpoint_dir
+    path_wav2lip = os.path.join(
+        checkpoint_dir, config.audio2exp.path.wav2lip_checkpoint
+    )
+    param_dict = ms.load_checkpoint(path_wav2lip)
     ms.load_param_into_net(wav2lip, param_dict)
     wav2lip.set_train(False)
 
     # load 3DMM Encoder
     coeff_enc = define_net_recon(net_recon="resnet50", use_last_fc=False, init_path="")
-    param_dict = ms.load_checkpoint(sadtalker_paths["path_of_net_recon_model"])
+    path_net_recon = os.path.join(checkpoint_dir, config.path.path_of_net_recon_model)
+    param_dict = ms.load_checkpoint(path_net_recon)
     ms.load_param_into_net(coeff_enc, param_dict)
     coeff_enc.set_train(False)
 
-    fcfg_exp = open(sadtalker_paths["audio2exp_yaml_path"])
-    cfg_exp = CN.load_cfg(fcfg_exp)
-    cfg_exp.freeze()
+    expnet_w_loss = ExpNetWithLossCell(audio2exp, wav2lip, coeff_enc, config)
+    expnet_t_step = nn.TrainOneStepCell(expnet_w_loss, optimizer)
 
-    audio2exp_model = Audio2Exp(
-        netG, cfg_exp, wav2lip=wav2lip, coeff_enc=coeff_enc, is_train=True
+    trainer = ExpNetTrainer(expnet_t_step, config)
+
+    return trainer
+
+
+def train(args, config):
+    context.set_context(
+        mode=context.GRAPH_MODE,
+        pynative_synchronize=True,
+        device_target="Ascend",
+        device_id=args.device_id,
     )
+
+    save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))
+    os.makedirs(save_dir, exist_ok=True)
+
+    # init model
+    preprocess_model = CropAndExtract(config.preprocess)
+
+    # load audio2exp_model
+    netG = ExpNet()
+    netG.set_train(True)
+
+    audio2exp_model = Audio2Exp(netG, config.audio2exp.model, is_train=True)
 
     for param in audio2exp_model.get_parameters():
         param.requires_grad = True
 
     audio2exp_model.set_train(True)
 
-    auto_mixed_precision(audio2exp_model, "O0")
+    # amp level
+    amp_level = config.system.get("amp_level", "O0")
+    auto_mixed_precision(audio2exp_model, amp_level)
 
-    # crop image and extract 3dmm from image
-    first_frame_dir = os.path.join(save_dir, "first_frame_dir")
-    os.makedirs(first_frame_dir, exist_ok=True)
-    print("3DMM Extraction for source image")
-    first_coeff_path, _, _ = preprocess_model.generate(
-        pic_path,
-        first_frame_dir,
-        args.preprocess,
-        source_image_flag=True,
-        pic_size=args.size,
+    # dataset
+    ds_train = TrainAudioCoeffDataset(
+        args=args,
+        preprocessor=preprocess_model,
+        save_dir=save_dir,
     )
 
-    if first_coeff_path is None:
-        print("Can't get the coeffs of the input")
-        return
-
-    if ref_eyeblink is not None:
-        ref_eyeblink_videoname = os.path.splitext(os.path.split(ref_eyeblink)[-1])[0]
-        ref_eyeblink_frame_dir = os.path.join(save_dir, ref_eyeblink_videoname)
-        os.makedirs(ref_eyeblink_frame_dir, exist_ok=True)
-        print("3DMM Extraction for the reference video providing eye blinking")
-        ref_eyeblink_coeff_path, _, _ = preprocess_model.generate(
-            ref_eyeblink,
-            ref_eyeblink_frame_dir,
-            args.preprocess,
-            source_image_flag=False,
-        )
-    else:
-        ref_eyeblink_coeff_path = None
-
-    if ref_pose is not None:
-        if ref_pose == ref_eyeblink:
-            ref_pose_coeff_path = ref_eyeblink_coeff_path
-        else:
-            ref_pose_videoname = os.path.splitext(os.path.split(ref_pose)[-1])[0]
-            ref_pose_frame_dir = os.path.join(save_dir, ref_pose_videoname)
-            os.makedirs(ref_pose_frame_dir, exist_ok=True)
-            print("3DMM Extraction for the reference video providing pose")
-            ref_pose_coeff_path, _, _ = preprocess_model.generate(
-                ref_pose, ref_pose_frame_dir, args.preprocess, source_image_flag=False
-            )
-    else:
-        ref_pose_coeff_path = None
-
-    # audio2ceoff
-    batch_size = 1
-    batch = get_data(
-        first_coeff_path, audio_path, ref_eyeblink_coeff_path, still=args.still
+    dataset_column_names = ds_train.get_output_columns()
+    ds_generator = ms.dataset.GeneratorDataset(
+        ds_train, column_names=dataset_column_names, shuffle=True
     )
-    dataset = DatasetWrapper(batch)
-    dataset_column_names = dataset.get_output_columns()
-    ds = ms.dataset.GeneratorDataset(
-        dataset, column_names=dataset_column_names, shuffle=True
-    )
-    dataloader = ds.batch(
-        batch_size,
+
+    dataloader = ds_generator.batch(
+        batch_size=args.batch_size,
         drop_remainder=True,
     )
-
-    # create loss
-    loss_fn = ExpNetLoss()
-    # loss_fn = DebugLoss()
-
-    net_with_loss = NetWithLossWrapper(audio2exp_model, loss_fn)
-
-    # get loss scales
-    loss_scale_manager = nn.FixedLossScaleUpdateCell(128)
 
     # lr scheduler
     min_lr = 0.0
     max_lr = 0.0005
     num_epochs = 2
     decay_epoch = 2
-    total_step = len(batch) * num_epochs
-    step_per_epoch = len(batch)
+    total_step = dataloader.get_dataset_size() * num_epochs
+    step_per_epoch = dataloader.get_dataset_size()
     lr_scheduler = nn.cosine_decay_lr(
         min_lr, max_lr, total_step, step_per_epoch, decay_epoch
     )
 
     # build optimizer
-    optimizer = nn.AdamWeightDecay(
-        audio2exp_model.trainable_params(), learning_rate=max_lr
+    model_params = list(audio2exp_model.trainable_params())
+    optimizer_params = [{"params": model_params, "lr": lr_scheduler}]
+    optimizer = nn.Adam(optimizer_params, learning_rate=max_lr)
+
+    trainer = expnet_trainer(
+        audio2exp_model,
+        optimizer,
+        config,
     )
 
-    # build train step cell
-    train_network = nn.TrainOneStepCell(net_with_loss, optimizer)
-
     # build callbacks
-    eval_cb = EvalSaveCallback(train_network)
+    eval_cb = EvalSaveCallback(audio2exp_model)
 
     # training
-    model = ms.Model(train_network)
-    model.train(
-        num_epochs,
+    initial_epoch = 0
+    print(" training...")
+    trainer.train(
+        num_epochs * dataloader.get_dataset_size(),
         dataloader,
         callbacks=[eval_cb],
         dataset_sink_mode=False,
-        initial_epoch=0,
+        initial_epoch=initial_epoch,
     )
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser()
-    parser.add_argument(
-        "--driven_audio",
-        default="./examples/driven_audio/bus_chinese.wav",
-        help="path to driven audio",
-    )
-    parser.add_argument(
-        "--source_image",
-        default="./examples/source_image/full_body_1.png",
-        help="path to source image",
-    )
-    parser.add_argument(
-        "--ref_eyeblink",
-        default=None,
-        help="path to reference video providing eye blinking",
-    )
-    parser.add_argument(
-        "--ref_pose", default=None, help="path to reference video providing pose"
-    )
-    parser.add_argument(
-        "--checkpoint_dir", default="./checkpoints", help="path to output"
-    )
-    parser.add_argument("--result_dir", default="./results", help="path to output")
-    parser.add_argument(
-        "--pose_style", type=int, default=0, help="input pose style from [0, 46)"
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=2, help="the batch size of facerender"
-    )
-    parser.add_argument(
-        "--size", type=int, default=256, help="the image size of the facerender"
-    )
-    parser.add_argument(
-        "--expression_scale",
-        type=float,
-        default=1.0,
-        help="the batch size of facerender",
-    )
-    parser.add_argument(
-        "--input_yaw",
-        nargs="+",
-        type=int,
-        default=None,
-        help="the input yaw degree of the user ",
-    )
-    parser.add_argument(
-        "--input_pitch",
-        nargs="+",
-        type=int,
-        default=None,
-        help="the input pitch degree of the user",
-    )
-    parser.add_argument(
-        "--input_roll",
-        nargs="+",
-        type=int,
-        default=None,
-        help="the input roll degree of the user",
-    )
-    parser.add_argument(
-        "--enhancer",
-        type=str,
-        default=None,
-        help="Face enhancer, [gfpgan, RestoreFormer]",
-    )
-    parser.add_argument(
-        "--background_enhancer",
-        type=str,
-        default=None,
-        help="background enhancer, [realesrgan]",
-    )
-    parser.add_argument("--cpu", dest="cpu", action="store_true")
-    parser.add_argument(
-        "--face3dvis", action="store_true", help="generate 3d face and 3d landmarks"
-    )
-    parser.add_argument(
-        "--still",
-        action="store_true",
-        help="can crop back to the original videos for the full body aniamtion",
-    )
-    parser.add_argument(
-        "--preprocess",
-        default="crop",
-        choices=["crop", "extcrop", "resize", "full", "extfull"],
-        help="how to preprocess the images",
-    )
-    parser.add_argument(
-        "--verbose", action="store_true", help="saving the intermedia output or not"
-    )
-
-    # net structure and parameters
-    parser.add_argument(
-        "--net_recon",
-        type=str,
-        default="resnet50",
-        choices=["resnet18", "resnet34", "resnet50"],
-        help="useless",
-    )
-    parser.add_argument("--init_path", type=str, default=None, help="Useless")
-    parser.add_argument(
-        "--use_last_fc", default=False, help="zero initialize the last fc"
-    )
-    parser.add_argument("--bfm_folder", type=str, default="./checkpoints/BFM_Fitting/")
-    parser.add_argument(
-        "--bfm_model", type=str, default="BFM_model_front.mat", help="bfm model"
-    )
-
-    # default renderer parameters
-    parser.add_argument("--focal", type=float, default=1015.0)
-    parser.add_argument("--center", type=float, default=112.0)
-    parser.add_argument("--camera_d", type=float, default=10.0)
-    parser.add_argument("--z_near", type=float, default=5.0)
-    parser.add_argument("--z_far", type=float, default=15.0)
-
-    args = parser.parse_args()
-
-    main(args)
+    args, cfg = parse_args_and_config()
+    config = Dict(cfg)
+    train(args, config)

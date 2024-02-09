@@ -13,25 +13,15 @@
 # limitations under the License.
 # ============================================================================
 
-import argparse
-import os
-import shutil
-import sys
-import shutil
-import cv2
-from time import strftime
-
 from addict import Dict
 from utils.arg_parser import parse_args_and_config
-
-args, cfg = parse_args_and_config()
 
 import mindspore as ms
 from mindspore import context, nn
 from mindspore.amp import auto_mixed_precision
 
 import mindspore as ms
-from mindspore import nn, context, CheckpointConfig
+from mindspore import nn, context
 from mindspore.amp import auto_mixed_precision
 
 from datasets.dataset_pvae import TrainPVAEDataset
@@ -121,35 +111,6 @@ def train(args, config):
     optimizer_G = nn.Adam(G_optimizer_params, learning_rate=max_lr)
     optimizer_D = nn.Adam(D_optimizer_params, learning_rate=max_lr)
 
-    # define callbacks
-    # save_checkpoint_steps = cfg.train_params.save_epoch_frq * loader_train.get_dataset_size()
-    # config_ck = CheckpointConfig(
-    #     save_checkpoint_steps=save_checkpoint_steps, keep_checkpoint_max=cfg.train_params.keep_checkpoint_max
-    # )
-    # summary_writer = None
-    # if rank_id == 0:
-    #     summary_writer = SummaryWriter(os.path.join(cfg.train_params.ckpt_save_dir, "summary"))
-    # callbacks = [ms.TimeMonitor()]
-    # if cfg.train_params.need_val:
-    #     callbacks.append(EvalAsInValPyCallBack(cfg, net, eval_network, summary_writer=summary_writer))
-    # if profile:
-    #     callbacks.append(ProfileCallback(**cfg.train_params.profile.cfg_dict))
-    # if rank_id == 0:
-    #     callbacks.append(
-    #         TrainingMonitor(
-    #             cfg.train_params.epoch_size,
-    #             cfg.steps_per_epoch,
-    #             print_frequency=cfg.train_params.print_frequency,
-    #             summary_writer=summary_writer,
-    #         )
-    #     )
-    #     callbacks.append(
-    #         ms.ModelCheckpoint(
-    #             prefix=cfg.model.name + "_" + cfg.dataset.dataset_name,
-    #             directory=cfg.train_params.ckpt_save_dir,
-    #             config=config_ck,
-    #         )
-    #     )
     eval_cb = EvalSaveCallback(net_audio2pose)
 
     # define trainer
@@ -166,5 +127,6 @@ def train(args, config):
 
 
 if __name__ == "__main__":
+    args, cfg = parse_args_and_config()
     config = Dict(cfg)
     train(args, config)
