@@ -1,6 +1,5 @@
 import numpy as np
 import cv2, os, argparse
-import utils.audio as audio
 import subprocess, random, string
 import platform
 from tqdm import tqdm
@@ -8,9 +7,14 @@ from glob import glob
 import mindspore as ms
 from mindspore import context
 from mindspore.amp import auto_mixed_precision
+
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 from models.wav2lip.wav2lip import Wav2Lip
 from models.face3d.facexlib import init_detection_model
-
+import utils.audio as audio
 
 parser = argparse.ArgumentParser(
     description="Inference code to lip-sync videos in the wild using Wav2Lip models"
@@ -20,7 +24,8 @@ parser.add_argument(
     "--checkpoint_path",
     type=str,
     help="Name of saved checkpoint to load weights from",
-    required=True,
+    required=False,
+    default="checkpoints/ms/ms_wav2lip.ckpt",
 )
 
 parser.add_argument(
@@ -242,7 +247,7 @@ mel_step_size = 16
 
 
 def main():
-    context.set_context(mode=ms.GRAPH_MODE, device_target="Ascend", device_id=0)
+    context.set_context(mode=ms.GRAPH_MODE, device_target="CPU", device_id=0)
 
     if not os.path.isfile(args.face):
         raise ValueError("--face argument must be a valid path to video/image file")
@@ -325,7 +330,7 @@ def main():
 
     # load wav2lip model
     wav2lip = Wav2Lip()
-    param_dict = ms.load_checkpoint("checkpoints/ms/ms_wav2lip.ckpt")
+    param_dict = ms.load_checkpoint(args.checkpoint_path)
     ms.load_param_into_net(wav2lip, param_dict)
     wav2lip.set_train(False)
     auto_mixed_precision(wav2lip, "O0")
@@ -341,9 +346,8 @@ def main():
                 fps,
                 (frame_w, frame_h),
             )
-
-        img_batch = ms.Tensor(np.transpose(img_batch, (0, 3, 1, 2)), ms.float32)
-        mel_batch = ms.Tensor(np.transpose(mel_batch, (0, 3, 1, 2)), ms.float32)
+        img_batch = ms.Tensor(np.transpose(img_batch, (0, 3, 1, 2)), ms.float32) # (fs, 6, 96, 96)
+        mel_batch = ms.Tensor(np.transpose(mel_batch, (0, 3, 1, 2)), ms.float32) # (fs, 1, 80, 16)
 
         pred = wav2lip(mel_batch, img_batch)
         pred = pred.asnumpy().transpose(0, 2, 3, 1) * 255.0
