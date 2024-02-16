@@ -11,11 +11,11 @@ preprocess:
 
 audio2exp:
   path:
-    checkpoint_dir: "./checkpoints/"
+    checkpoint_dir: "./checkpoints/ms/"
     # inference
-    audio2exp_checkpoint: 'ms/ms_audio2exp.ckpt'
+    audio2exp_checkpoint: 'ms_audio2exp.ckpt'
     # train
-    wav2lip_checkpoint: 'wav2lip.pth'
+    wav2lip_checkpoint: 'ms_wav2lip.ckpt'
 
   model:
     audioencoder:

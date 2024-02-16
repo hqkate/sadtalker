@@ -120,7 +120,7 @@ class AudioCoeffDataset:
         os.makedirs(self.first_frame_dir, exist_ok=True)
         print("3DMM Extraction for source image")
 
-        first_coeff_path, crop_pic_path, crop_info = self.preprocessor.generate(
+        first_coeff_path, crop_pic_path, crop_info, crop_frames = self.preprocessor.generate(
             source_image,
             self.first_frame_dir,
             self.args.preprocess,
@@ -173,6 +173,7 @@ class AudioCoeffDataset:
             crop_info,
             ref_eyeblink_coeff_path,
             ref_pose_coeff_path,
+            crop_frames
         )
 
     def _get_idx_seq(self, frame_idx, mel_size):
@@ -262,6 +263,7 @@ class AudioCoeffDataset:
             crop_info,
             ref_eyeblink_coeff_path,
             ref_pose_coeff_path,
+            _,
         ) = self.crop_and_extract(image_path)
 
         # 2. process audio
@@ -324,15 +326,13 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "ref",
             "num_frames",
             "ratio_gt",
-            "ref_pose_coeff_path",
-            "first_coeff_path",
-            "crop_pic_path",
-            "crop_info",
+            "audio_wav",
+            "source_image",
+            "target_image",
         ]
 
     def process_data(self, image_paths, audio_path):
 
-        source_image = image_paths[0] # take 1st as the source image
         frame_idx = 0
 
         # 1. crop and extract 3dMM coefficients
@@ -342,7 +342,8 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             crop_info,
             ref_eyeblink_coeff_path,
             ref_pose_coeff_path,
-        ) = self.crop_and_extract(source_image)
+            crop_frames,
+        ) = self.crop_and_extract(image_paths)
 
         # 2. process audio
         if self.idlemode:
@@ -357,15 +358,12 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         )
 
         # 4. images
-        src_image = Image.open(crop_pic_path)
+        src_image = crop_frames[0]
         src_image = np.array(src_image)
         src_image = ms.Tensor(img_as_float32(src_image))
 
         # crop target image (ground truth) according to source image
-        ### TODO: crop wrt crop_info
-        tgt_image = image_paths[frame_idx]
-        tgt_image = Image.open(tgt_image)
-        tgt_image = np.array(tgt_image)
+        tgt_image = crop_frames[frame_idx]
         tgt_image = ms.Tensor(img_as_float32(tgt_image))
 
         data_dict = {
@@ -379,7 +377,7 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "first_coeff_path": first_coeff_path,
             "crop_pic_path": crop_pic_path,
             "crop_info": crop_info,
-            "first_frame_img": crop_pic_path,
+            "first_frame_img": src_image,
             "source_image": src_image,
             "target_image": tgt_image,
         }

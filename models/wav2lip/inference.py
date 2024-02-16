@@ -342,6 +342,7 @@ def main():
                 (frame_w, frame_h),
             )
 
+        import pdb; pdb.set_trace()
         img_batch = ms.Tensor(np.transpose(img_batch, (0, 3, 1, 2)), ms.float32)
         mel_batch = ms.Tensor(np.transpose(mel_batch, (0, 3, 1, 2)), ms.float32)
 

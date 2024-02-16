@@ -81,7 +81,7 @@ class CropAndExtract:
         # 2. get the landmark according to the detected face.
         # load 3dmm paramter generator from Deep3DFaceRecon_pytorch
         video_coeffs, full_coeffs = [], []
-        for idx in tqdm(range(len(imgs)), desc="3DMM Extraction In Video:"):
+        for idx in tqdm(range(len(imgs)), desc="3DMM Extraction:"):
             frame = imgs[idx]
 
             if not isinstance(frame, Image.Image):
@@ -138,14 +138,21 @@ class CropAndExtract:
         source_image_flag=False,
         pic_size=256,
     ):
-        pic_name = os.path.splitext(os.path.split(input_path)[-1])[0]
+
+        if isinstance(input_path, list):
+            input_path = sorted(input_path)
+            pic_name = os.path.splitext(os.path.split(input_path[0])[-1])[0]
+        else:
+            pic_name = os.path.splitext(os.path.split(input_path)[-1])[0]
 
         landmarks_path = os.path.join(save_dir, pic_name + "_landmarks.txt")
         coeff_path = os.path.join(save_dir, pic_name + ".mat")
         png_path = os.path.join(save_dir, pic_name + ".png")
 
         # load input
-        if not os.path.isfile(input_path):
+        if isinstance(input_path, list):
+            full_frames = [cv2.imread(fpath) for fpath in input_path if os.path.isfile(fpath)]
+        elif not os.path.isfile(input_path):
             raise ValueError("input_path must be a valid path to video/image file")
         elif input_path.split(".")[-1] in ["jpg", "png", "jpeg"]:
             # loader for first frame
@@ -172,18 +179,7 @@ class CropAndExtract:
         print("start cropping the image ...")
 
         # crop images as the
-        if "crop" in crop_or_resize.lower():  # default crop
-            x_full_frames, crop, quad = self.propress.crop(
-                x_full_frames,
-                still=True if "ext" in crop_or_resize.lower() else False,
-                xsize=512,
-            )
-            clx, cly, crx, cry = crop
-            lx, ly, rx, ry = quad
-            lx, ly, rx, ry = int(lx), int(ly), int(rx), int(ry)
-            oy1, oy2, ox1, ox2 = cly + ly, cly + ry, clx + lx, clx + rx
-            crop_info = ((ox2 - ox1, oy2 - oy1), crop, quad)
-        elif "full" in crop_or_resize.lower():
+        if "crop" in crop_or_resize.lower() or "full" in crop_or_resize.lower():  # default crop
             x_full_frames, crop, quad = self.propress.crop(
                 x_full_frames,
                 still=True if "ext" in crop_or_resize.lower() else False,
@@ -214,20 +210,30 @@ class CropAndExtract:
         print("finished cropping, now saving the image to file.")
 
         # save crop info
-        for frame in frames_pil:
-            cv2.imwrite(png_path, cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR))
+        cv2.imwrite(png_path, cv2.cvtColor(np.array(frames_pil[0]), cv2.COLOR_RGB2BGR))
 
-        print(f"finished cropping the image and saved to file {png_path}.")
+        # for frame in frames_pil:
+        #     cv2.imwrite(png_path, cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR))
+
+        # print(f"finished cropping the image and saved to file {png_path}.")
+
+        # if not os.path.isfile(coeff_path):
+        #     mats_3dmm = self.extract_3dmm(frames_pil, landmarks_path, x_full_frames)
+
+        #     savemat(
+        #         coeff_path,
+        #         mats_3dmm,
+        #     )
 
         if not os.path.isfile(coeff_path):
-            mats_3dmm = self.extract_3dmm(frames_pil, landmarks_path, x_full_frames)
+            mats_3dmm = self.extract_3dmm(frames_pil[:1], landmarks_path, x_full_frames[:1])
 
             savemat(
                 coeff_path,
                 mats_3dmm,
             )
 
-        return coeff_path, png_path, crop_info
+        return coeff_path, png_path, crop_info, frames_pil
 
     def generate_for_train(
         self,
@@ -272,18 +278,7 @@ class CropAndExtract:
         print("读取视频完毕====>", video_path, "  ", os.getpid())
 
         #### crop images as the
-        if "crop" in crop_or_resize.lower():  # default crop
-            x_full_frames, crop, quad = self.propress.crop(
-                x_full_frames,
-                still=True if "ext" in crop_or_resize.lower() else False,
-                xsize=512,
-            )
-            clx, cly, crx, cry = crop
-            lx, ly, rx, ry = quad
-            lx, ly, rx, ry = int(lx), int(ly), int(rx), int(ry)
-            oy1, oy2, ox1, ox2 = cly + ly, cly + ry, clx + lx, clx + rx
-            crop_info = ((ox2 - ox1, oy2 - oy1), crop, quad)
-        elif "full" in crop_or_resize.lower():
+        if "crop" in crop_or_resize.lower() or "full" in crop_or_resize.lower():  # default crop
             x_full_frames, crop, quad = self.propress.crop(
                 x_full_frames,
                 still=True if "ext" in crop_or_resize.lower() else False,

@@ -1,5 +1,5 @@
 system:
-  mode: 0 # 0 for graph mode, 1 for pynative mode in mindspore
+  mode: 1 # 0 for graph mode, 1 for pynative mode in mindspore
   amp_level: 'O3'
   seed: 42
 
@@ -58,7 +58,7 @@ audio2pose:
 facerender:
   path:
     checkpoint_dir: "./checkpoints/"
-    mappingnet_checkpoint: 'ms/ms_mapping.ckpt'
+    mappingnet_checkpoint: 'ms/ms_mapping.ckpt' # ms/ms_mapping_full.ckpt if under 'full' preprocess
     generator_checkpoint: 'ms/ms_generator.ckpt'
     kp_extractor_checkpoint: 'ms/ms_kp_extractor.ckpt'
     he_estimator_checkpoint: 'ms/ms_he_estimator.ckpt'

@@ -190,7 +190,7 @@ class RetinaFace(nn.Cell):
         # convert to torch.tensor format
         # image -= (104, 117, 123)
         image = image.transpose(2, 0, 1)
-        image = ms.Tensor(image).unsqueeze(0)
+        image = ms.Tensor(np.expand_dims(image, axis=0))
 
         return image, resize
 
@@ -206,6 +206,7 @@ class RetinaFace(nn.Cell):
         image, self.resize = self.transform(image, use_origin_size)
         if self.half_inference:
             image = image.half()
+
         image = image - self.mean_tensor
 
         loc, conf, landmarks, priors = self.__detect_faces(image)

@@ -21,7 +21,7 @@ from models.audio2exp.trainer import ExpNetWithLossCell, ExpNetTrainer
 def expnet_trainer(audio2exp, optimizer, config):
     # load wav2lip model
     wav2lip = Wav2Lip()
-    checkpoint_dir = config.path.checkpoint_dir
+    checkpoint_dir = config.audio2exp.path.checkpoint_dir
     path_wav2lip = os.path.join(
         checkpoint_dir, config.audio2exp.path.wav2lip_checkpoint
     )
@@ -31,7 +31,10 @@ def expnet_trainer(audio2exp, optimizer, config):
 
     # load 3DMM Encoder
     coeff_enc = define_net_recon(net_recon="resnet50", use_last_fc=False, init_path="")
-    path_net_recon = os.path.join(checkpoint_dir, config.path.path_of_net_recon_model)
+    checkpoint_dir = config.preprocess.path.checkpoint_dir
+    path_net_recon = os.path.join(
+        checkpoint_dir, config.preprocess.path.path_of_net_recon_model
+    )
     param_dict = ms.load_checkpoint(path_net_recon)
     ms.load_param_into_net(coeff_enc, param_dict)
     coeff_enc.set_train(False)
@@ -46,9 +49,9 @@ def expnet_trainer(audio2exp, optimizer, config):
 
 def train(args, config):
     context.set_context(
-        mode=context.GRAPH_MODE,
+        mode=context.PYNATIVE_MODE,
         pynative_synchronize=True,
-        device_target="Ascend",
+        device_target="CPU",
         device_id=args.device_id,
     )
 
