@@ -179,79 +179,85 @@ class Wav2Lip(nn.Cell):
             feats.append(x)
 
         x = audio_embedding
-        # for f in self.face_decoder_blocks:
-        #     x = f(x)
-        #     try:
-        #         x = ops.cat((x, feats[-1]), axis=1)
-        #     except Exception as e:
-        #         print(x.size())
-        #         print(feats[-1].size())
-        #         raise e
+        for f in self.face_decoder_blocks:
+            x = f(x)
+            # try:
+            #     x = ops.cat((x, feats[-1]), axis=1)
+            # except Exception as e:
+            #     print(x.shape)
+            #     print(feats[-1].shape)
+            #     raise e
+            if (
+                x.shape[0] == feats[-1].shape[0]
+                and x.shape[2] == feats[-1].shape[2]
+                and x.shape[3] == feats[-1].shape[3]
+            ):
+                x = ops.cat((x, feats[-1]), axis=1)
 
-        #     feats.pop()
+            feats.pop()
 
-        x = self.face_decoder_blocks[0](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[0](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
-        x = self.face_decoder_blocks[1](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[1](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
-        x = self.face_decoder_blocks[2](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[2](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
-        x = self.face_decoder_blocks[3](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[3](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
-        x = self.face_decoder_blocks[4](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[4](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
-        x = self.face_decoder_blocks[5](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[5](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
-        x = self.face_decoder_blocks[6](x)
-        if (
-            x.shape[0] == feats[-1].shape[0]
-            and x.shape[2] == feats[-1].shape[2]
-            and x.shape[3] == feats[-1].shape[3]
-        ):
-            x = ops.cat((x, feats[-1]), axis=1)
-        feats.pop()
+        # x = self.face_decoder_blocks[6](x)
+        # if (
+        #     x.shape[0] == feats[-1].shape[0]
+        #     and x.shape[2] == feats[-1].shape[2]
+        #     and x.shape[3] == feats[-1].shape[3]
+        # ):
+        #     x = ops.cat((x, feats[-1]), axis=1)
+        # feats.pop()
 
         x = self.output_block(x)
 

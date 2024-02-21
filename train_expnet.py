@@ -18,7 +18,7 @@ from models.audio2exp.audio2exp import Audio2Exp
 from models.audio2exp.trainer import ExpNetWithLossCell, ExpNetTrainer
 
 
-def expnet_trainer(audio2exp, optimizer, config):
+def expnet_trainer(audio2exp, optimizer, config, args):
     # load wav2lip model
     wav2lip = Wav2Lip()
     checkpoint_dir = config.audio2exp.path.checkpoint_dir
@@ -39,7 +39,7 @@ def expnet_trainer(audio2exp, optimizer, config):
     ms.load_param_into_net(coeff_enc, param_dict)
     coeff_enc.set_train(False)
 
-    expnet_w_loss = ExpNetWithLossCell(audio2exp, wav2lip, coeff_enc, config)
+    expnet_w_loss = ExpNetWithLossCell(audio2exp, wav2lip, coeff_enc, config, args)
     expnet_t_step = nn.TrainOneStepCell(expnet_w_loss, optimizer)
 
     trainer = ExpNetTrainer(expnet_t_step, config)
@@ -49,7 +49,7 @@ def expnet_trainer(audio2exp, optimizer, config):
 
 def train(args, config):
     context.set_context(
-        mode=context.PYNATIVE_MODE,
+        mode=context.GRAPH_MODE,
         pynative_synchronize=True,
         device_target="CPU",
         device_id=args.device_id,
@@ -113,6 +113,7 @@ def train(args, config):
         audio2exp_model,
         optimizer,
         config,
+        args,
     )
 
     # build callbacks

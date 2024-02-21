@@ -107,7 +107,6 @@ class CropAndExtract:
                 .permute(2, 0, 1)
                 .unsqueeze(0)
             )
-
             full_coeff = self.net_recon(im_t)
             coeffs = split_coeff(full_coeff)
 

@@ -92,14 +92,16 @@ class ParametricFaceModel:
             exp_coeff        -- torch.tensor, size (B, 64), expression coeffs
         """
         batch_size = id_coeff.shape[0]
-        id_part = ms.Tensor(
-            np.einsum('ij,aj->ai', self.id_base, id_coeff.asnumpy()),
-            ms.float32
-        )
-        exp_part = ms.Tensor(
-            np.einsum('ij,aj->ai', self.exp_base, exp_coeff.asnumpy()),
-            ms.float32
-        )
+        # id_part = ms.Tensor(
+        #     np.einsum('ij,aj->ai', self.id_base, id_coeff.asnumpy()),
+        #     ms.float32
+        # )
+        id_part = ops.BatchMatMul(transpose_b=True)(ms.Tensor(self.id_base), id_coeff).T
+        # exp_part = ms.Tensor(
+        #     np.einsum('ij,aj->ai', self.exp_base, exp_coeff.asnumpy()),
+        #     ms.float32
+        # )
+        exp_part = ops.BatchMatMul(transpose_b=True)(ms.Tensor(self.exp_base), exp_coeff).T
         face_shape = id_part + exp_part + \
             ms.Tensor(self.mean_shape.reshape([1, -1]), ms.float32)
         return face_shape.reshape([batch_size, -1, 3])
@@ -113,9 +115,9 @@ class ParametricFaceModel:
             tex_coeff        -- torch.tensor, size (B, 80)
         """
         batch_size = tex_coeff.shape[0]
-
-        face_texture = ms.Tensor(np.einsum(
-            'ij,aj->ai', self.tex_base, tex_coeff.asnumpy(), ms.float32)) + ms.Tensor(self.mean_tex, ms.float32)
+        # face_texture = ms.Tensor(np.einsum(
+        #     'ij,aj->ai', self.tex_base, tex_coeff.asnumpy(), ms.float32)) + ms.Tensor(self.mean_tex, ms.float32)
+        face_texture = ops.BatchMatMul(transpose_b=True)(ms.Tensor(self.tex_base), tex_coeff).T + ms.Tensor(self.mean_tex, ms.float32)
         if normalize:
             face_texture = face_texture / 255.
         return face_texture.reshape([batch_size, -1, 3])

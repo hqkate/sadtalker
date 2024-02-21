@@ -1,4 +1,5 @@
 import os
+import cv2
 import random
 from tqdm import tqdm
 from glob import glob
@@ -329,6 +330,7 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "audio_wav",
             "source_image",
             "target_image",
+            "masked_src_img",
         ]
 
     def process_data(self, image_paths, audio_path):
@@ -360,11 +362,20 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         # 4. images
         src_image = crop_frames[0]
         src_image = np.array(src_image)
-        src_image = ms.Tensor(img_as_float32(src_image))
+        src_image_ts = ms.Tensor(img_as_float32(src_image))
 
         # crop target image (ground truth) according to source image
         tgt_image = crop_frames[frame_idx]
         tgt_image = ms.Tensor(img_as_float32(tgt_image))
+
+        # mask image for wav2lip
+        img_size = 96
+        src_image_resized = cv2.resize(src_image, (img_size, img_size))
+        masked_image = src_image_resized.copy()
+        masked_image = cv2.resize(masked_image, (img_size, img_size))
+        masked_image[:, img_size // 2 :] = 0.0
+        masked_src_img = np.concatenate((masked_image, src_image_resized), axis=2) / 255.0
+        masked_src_img = ms.Tensor(np.transpose(masked_src_img, (2, 0, 1)), ms.float32)
 
         data_dict = {
             "indiv_mels": indiv_mels,
@@ -377,8 +388,8 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "first_coeff_path": first_coeff_path,
             "crop_pic_path": crop_pic_path,
             "crop_info": crop_info,
-            "first_frame_img": src_image,
-            "source_image": src_image,
+            "masked_src_img": masked_src_img,
+            "source_image": src_image_ts,
             "target_image": tgt_image,
         }
 

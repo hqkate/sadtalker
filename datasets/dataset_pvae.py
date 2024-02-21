@@ -17,11 +17,9 @@ class TrainPVAEDataset:
         self.syncnet_T = syncnet_T
         self.syncnet_mel_step_size = syncnet_mel_step_size
 
-    # 得到帧数的id
     def get_frame_id(self, frame):
         return int(os.path.basename(frame).split("_")[-1].split(".")[0])  #
 
-    # 得到window
     def get_window(self, start_frame):
         start_id = self.get_frame_id(start_frame)
         vidpath = os.path.dirname(start_frame)
@@ -38,7 +36,6 @@ class TrainPVAEDataset:
             window_fnames.append(frame)
         return window_fnames, start_id, end_id
 
-    # 读取window的图像
     def read_window(self, window_fnames):
         if window_fnames is None:
             return None
@@ -51,7 +48,7 @@ class TrainPVAEDataset:
             window.append(img)
         return window
 
-    # 获取某一帧的audio
+    # get the audio of a certain frame
     def crop_audio_window(self, spec, start_frame):
         if type(start_frame) == int:
             start_frame_num = start_frame
@@ -65,7 +62,6 @@ class TrainPVAEDataset:
         seq = [min(max(item, 0), spec.shape[0] - 1) for item in seq]
         return spec[seq, :]
 
-    # 获取window内的audio
     def get_segmented_mels(self, spec, start_frame):
         mels = []
         start_frame_num = start_frame + 1
@@ -87,8 +83,8 @@ class TrainPVAEDataset:
         return x
 
     def parse_audio_length(self, audio_length, sr, fps):
-        # time = audio_length / sr  #视频的长度
-        # 那么对应的图像共有： num_frames = time * fps = audio_length / sr * fps
+        # time = audio_length / sr  # length of the video
+        # the corresponding images： num_frames = time * fps = audio_length / sr * fps
         bit_per_frames = sr / fps
 
         num_frames = int(audio_length / bit_per_frames)
@@ -117,26 +113,26 @@ class TrainPVAEDataset:
         return len(self.all_videos)
 
     def __getitem__(self, idx):
-        # 选择一个视频 找到对应的audio
+        # select a video and find the corresponding audio
         video_dir, label = self.all_videos[idx].split(" ")
         dirname = video_dir.split("/")[-1]
-        image_paths = glob(os.path.join(video_dir, "*.png"))  # 图像的路径
+        image_paths = glob(os.path.join(video_dir, "*.png"))
 
         print(f"start process data {idx}.")
 
-        # 读取音频并进行预处理
+        # read audio and preprocess it
         start_time = time.time()
         wavpath = os.path.join(
             video_dir.replace("/images/", "/orig_mel/"), "orig_mel.npy"
         )
         # wav = audio.load_wav(wavpath, 16000)
-        # wav_length, num_frames = self.parse_audio_length(len(wav), 16000, 25)    #将音频重采样并对准到25fps
+        # wav_length, num_frames = self.parse_audio_length(len(wav), 16000, 25)    # resample and align audio to 25fps
         # wav = self.crop_pad_audio(wav, wav_length)
         # start_time = time.time()
-        # orig_mel = audio.melspectrogram(wav).T    #得到特征
+        # orig_mel = audio.melspectrogram(wav).T    #get features
         orig_mel = np.load(wavpath)
 
-        # 读取pose
+        # load pose
         pose_path = os.path.join(
             video_dir.replace("/images/", "/pose/"), dirname + ".mat"
         )  #
@@ -147,29 +143,28 @@ class TrainPVAEDataset:
             print("mismatch coeff_3dmm and len(image_paths)", pose_path)
 
         start_time = time.time()
-        ##随机选取一帧,得到窗口并读取图片
+        # randomly select a frame, get the window and read the picture
         valid_paths = list(sorted(image_paths))[: len(image_paths) - self.syncnet_T]
-        img_path = random.choice(valid_paths)  # 随机选取一帧
+        img_path = random.choice(valid_paths)
         window_fnames, start_id, end_id = self.get_window(img_path)  #
         if window_fnames is None:
             raise ValueError("invalid image with none window fnames.")
         # window = self.read_window(window_fnames)
-        # if window is None:  #读取的图像有误
+        # if window is None:
         #     continue
 
-        # 得到winow起始帧的wav以及整个window的wav
-        # mel = self.crop_audio_window(orig_mel.copy(), 1)  #起始帧的mel
+        # mel = self.crop_audio_window(orig_mel.copy(), 1)  # mel of starting frame
         # if (mel.shape[0] != self.syncnet_mel_step_size):
         #     continue
         first_indiv_mels = self.get_segmented_mels(orig_mel.copy(), 1)[:1, :, :]
-        indiv_mels = self.get_segmented_mels(orig_mel.copy(), start_id)  # 整个window的mel
+        indiv_mels = self.get_segmented_mels(orig_mel.copy(), start_id)  # The mel of the entire window
         if indiv_mels is None:
             raise ValueError("indiv_mels is none!")
         if indiv_mels.shape != (self.syncnet_T, 80, self.syncnet_mel_step_size):
             # print('indiv_mels mismatch', video_dir)
             raise ValueError(f"indiv_mels mismatch {video_dir}")
 
-        # 得到第一帧的ceoff_3dmm以及整个window的ceoff_3dmm
+        # Get the coeff_3dmm of the first frame and the coeff_3dmm of the entire window
         first_coeff_3dmm = np.expand_dims(coeff_3dmm[0], 0)  # ρ0
         window_coeff_3dmm = coeff_3dmm[start_id:end_id]  #
         ref_coeff = np.repeat(first_coeff_3dmm, self.syncnet_T, axis=0)  #
@@ -180,7 +175,7 @@ class TrainPVAEDataset:
             # print('window_coeff_3dmm mismatch', video_dir)
             raise ValueError(f"window_coeff_3dmm mismatch {video_dir}.")
 
-        # window = self.prepare_window(window)  #预处理图片
+        # window = self.prepare_window(window)
         first_coeff_3dmm = ms.Tensor(first_coeff_3dmm.astype(np.float32), ms.float32)
         window_coeff_3dmm = ms.Tensor(window_coeff_3dmm.astype(np.float32), ms.float32)
         first_indiv_mels = ms.Tensor(first_indiv_mels.astype(np.float32), ms.float32)

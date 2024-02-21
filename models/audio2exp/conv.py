@@ -197,7 +197,7 @@ class Conv2dTranspose(nn.Cell):
             pad_mode = "pad"
 
         self.conv_block = nn.SequentialCell(
-            Conv2dTransposeTorch(
+            nn.Conv2dTranspose(
                 cin,
                 cout,
                 kernel_size,

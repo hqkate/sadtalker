@@ -34,8 +34,8 @@ class LandmarksLoss(nn.LossBase):
             + ops.dist(points[:, 44, :], points[:, 47, :])
         ) / 4.0
 
-        ratio = ops.div(height, width)
-        return ratio  # [B]
+        ratio = height.astype(ms.float32)  / width.astype(ms.float32)
+        return ratio.astype(ms.float32)  # [B]
 
     def get_eye_loss(self, lks, z_blink):
         eye_ratio = self.get_eye_ratio(lks)
@@ -58,7 +58,7 @@ class LandmarksLoss(nn.LossBase):
 
 
 class LipReadingLoss(nn.LossBase):
-    def __init__(self, lipreading_video, lipreading_audio, renderer, reduction="mean"):
+    def __init__(self, lipreading_video, lipreading_audio, renderer, reduction="mean", batch_size=1):
         super().__init__(reduction)
         self.lipreading_video = lipreading_video
         self.lipreading_audio = lipreading_audio
@@ -70,6 +70,7 @@ class LipReadingLoss(nn.LossBase):
         self._window_margin = 12
         self._start_idx = 48
         self._stop_idx = 68
+        self._bs = batch_size
 
         crop_size = (88, 88)
         mean = 0.421
@@ -153,13 +154,12 @@ class LipReadingLoss(nn.LossBase):
 
     def preprocess_audio(self, audio_wav):
         audio_wav = NormalizeUtterance()(audio_wav)
+        audio_wav = audio_wav.unsqueeze(1)
         return audio_wav
 
     def preprocess_images(self, pred_faces, landmarks):
         # codes borrowed from https://github.com/filby89/spectre/blob/master/src/trainer_spectre.py
         # ---- initialize values for cropping the face around the mouth for lipread loss ---- #
-
-        T = 12
 
         """ lipread loss - first crop the mouths of the input and rendered faces
         and then calculate the cosine distance of features
@@ -172,8 +172,7 @@ class LipReadingLoss(nn.LossBase):
 
         # ---- resize back to Bx1xKxHxW (grayscale input for lipread net) ---- #
         # (bs, color channel-grey scale, seq-length, width, height)
-        mouths_pred = ops.split(ms.Tensor(mouths_pred), T)
-        mouths_pred = ops.stack(mouths_pred).squeeze(-1).unsqueeze(1)
+        mouths_pred = ms.Tensor(mouths_pred.transpose(0, 3, 1, 2)).unsqueeze(2)
 
         return mouths_pred
 
@@ -182,7 +181,7 @@ class LipReadingLoss(nn.LossBase):
     ):
         # face rendering
         pred_faces = []
-        for i in range(len(face_vertex)):
+        for i in range(self._bs):
             pred_face = self.renderer(
                 face_vertex[i, :, :].asnumpy(),
                 face_color[i, :, :].asnumpy(),
@@ -196,10 +195,10 @@ class LipReadingLoss(nn.LossBase):
         input_tensor = self.preprocess_images(pred_faces, landmarks)
         input_audio = self.preprocess_audio(audio_wav)
 
-        c_p = self.lipreading_audio(input_audio, [640] * len(input_audio))  # (B, 500)
+        c_p = self.lipreading_audio(input_audio, [input_audio.shape[-1]] * len(input_audio))  # (B, 500)
         c_gt = self.lipreading_video(
-            input_tensor, [640] * len(input_tensor)
-        )  # logits (7, 500)
+            input_tensor, [input_tensor.shape[-1]] * len(input_tensor)
+        )
 
         loss = self.celoss(ops.log_softmax(c_p), ops.log_softmax(c_gt))
         return loss

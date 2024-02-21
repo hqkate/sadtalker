@@ -1,6 +1,6 @@
 system:
   mode: 0 # 0 for graph mode, 1 for pynative mode in mindspore
-  amp_level: 'O3'
+  amp_level: 'O0'
   seed: 42
 
 preprocess:

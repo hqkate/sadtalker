@@ -349,8 +349,8 @@ def main():
         img_batch = ms.Tensor(np.transpose(img_batch, (0, 3, 1, 2)), ms.float32) # (fs, 6, 96, 96)
         mel_batch = ms.Tensor(np.transpose(mel_batch, (0, 3, 1, 2)), ms.float32) # (fs, 1, 80, 16)
 
-        pred = wav2lip(mel_batch, img_batch)
-        pred = pred.asnumpy().transpose(0, 2, 3, 1) * 255.0
+        pred = wav2lip(mel_batch, img_batch) # (fs, 3, 96, 96)
+        pred = pred.asnumpy().transpose(0, 2, 3, 1) * 255.0 # (fs, 96, 96, 3)
 
         for p, f, c in zip(pred, frames, coords):
             y1, y2, x1, x2 = c
