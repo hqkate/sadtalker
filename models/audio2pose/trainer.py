@@ -102,7 +102,7 @@ class GWithLossCell(nn.Cell):
         self.discriminator = discriminator
 
         self.l1 = nn.L1Loss()
-        self.criterion = nn.BCELoss(reduction="mean")
+        self.criterion = nn.BCEWithLogitsLoss(reduction="mean")
         self.real_target = Tensor(1.0, mstype.float32)
 
         self.mse = nn.MSELoss()
@@ -139,12 +139,12 @@ class DWithLossCell(nn.Cell):
     def __init__(self, discriminator):
         super().__init__()
         self.discriminator = discriminator
-        self.criterion = nn.BCELoss(reduction="mean")
+        self.criterion = nn.BCEWithLogitsLoss(reduction="mean")
         self.real_target = Tensor(1.0, mstype.float32)
         self.fake_target = Tensor(0.0, mstype.float32)
 
     def construct(self, ground_truth, generated_samples):
-        ground_truth = ground_truth[1:, 64:].unsqueeze(0)
+        ground_truth = ground_truth[:, 1:, 64:]
         real_pred = self.discriminator(ground_truth).astype(mstype.float32)
         fake_pred = self.discriminator(generated_samples).astype(mstype.float32)
 
@@ -194,9 +194,9 @@ class VAEGTrainer:
                 print("Reached the target number of iterations")
                 break
 
-            x_gt = sample["data"]["gt"]
-            x_class = sample["data"]["class"]
-            x_indiv_mels = sample["data"]["indiv_mels"]
+            x_gt = sample["gt"]
+            x_class = sample["class"]
+            x_indiv_mels = sample["indiv_mels"]
 
             loss_g, loss_d = self.run(x_gt, x_class, x_indiv_mels)
 

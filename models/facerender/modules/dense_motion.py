@@ -65,18 +65,26 @@ class DenseMotionNetwork(nn.Cell):
         bs, _, d, h, w = feature.shape
 
         identity_grid = make_coordinate_grid((d, h, w))
-        identity_grid = identity_grid.view(1, 1, d, h, w, 3)
-        coordinate_grid = identity_grid - kp_driving.view(
-            bs, self.num_kp, 1, 1, 1, 3
-        )
 
+        # trail convert to 4d
+        # identity_grid = identity_grid.view(-1, 3)
+        # identity_grid = identity_grid.unsqueeze(0).unsqueeze(0) # (1, 1, 16*64*64, 3)
+        # coordinate_grid = ops.sub(identity_grid, kp_driving.unsqueeze(2)) # (bs, self.num_kp, 1, 3) -> (bs, self.num_kp, 16*64*64, 3)
+        # driving_to_source = coordinate_grid + kp_source.unsqueeze(2) # (bs, num_kp, d*h*w, 3)
+
+        # coordinate_grid = coordinate_grid.view(bs, self.num_kp, d, h, w, 3)
+        # driving_to_source = driving_to_source.view(bs, self.num_kp, d, h, w, 3)
+        # identity_grid = identity_grid.view(1, 1, d, h, w, 3).repeat(bs, 0)
+
+        identity_grid = identity_grid.unsqueeze(0).unsqueeze(0) # (1, 1, 16, 64, 64, 3)
+        identity_grid = identity_grid.repeat(bs, 0)
+        coordinate_grid = identity_grid - kp_driving.unsqueeze(2).unsqueeze(2).unsqueeze(2) # (bs, self.num_kp, 1, 1, 1, 3)
         driving_to_source = coordinate_grid + kp_source.view(
             bs, self.num_kp, 1, 1, 1, 3
         )  # (bs, num_kp, d, h, w, 3)
 
         # adding background feature
-        # identity_grid = identity_grid.repeat(bs, axis=0)
-        identity_grid = ops.cat([identity_grid] * bs, axis=0)
+        # identity_grid = ops.cat([identity_grid] * bs, axis=0)
         sparse_motions = ops.cat(
             [identity_grid, driving_to_source], axis=1
         )  # bs num_kp+1 d h w 3
@@ -96,6 +104,7 @@ class DenseMotionNetwork(nn.Cell):
         feature_repeat = feature_repeat.view(bs * (self.num_kp + 1), -1, d, h, w)
         # (bs*(num_kp+1), d, h, w, 3) !!!!
         sparse_motions = sparse_motions.view((bs * (self.num_kp + 1), d, h, w, -1))
+        feature_repeat = feature_repeat.astype(ms.float32)
         sparse_deformed = ops.grid_sample(feature_repeat, sparse_motions)
         # (bs, num_kp+1, c, d, h, w)
         sparse_deformed = sparse_deformed.view((bs, self.num_kp + 1, -1, d, h, w))
@@ -135,7 +144,7 @@ class DenseMotionNetwork(nn.Cell):
             deformed_feature, kp_driving, kp_source
         ) # (2, 16, 1, 16, 64, 64)
 
-        heatmap = heatmap.astype(ms.float16)
+        heatmap = heatmap.astype(ms.float32)
         input_ = ops.cat([heatmap, deformed_feature], axis=2)
         input_ = input_.view(bs, -1, d, h, w)
 

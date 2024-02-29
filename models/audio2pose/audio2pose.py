@@ -22,12 +22,11 @@ class Audio2Pose(nn.Cell):
         self.netD_motion = PoseSequenceDiscriminator(cfg)
 
     def construct(self, x_gt, x_class, x_indiv_mels):
-
         batch = {}
-        coeff_gt = x_gt.unsqueeze(0)  # bs frame_len+1 73
+        coeff_gt = x_gt  # bs frame_len+1 73
         batch['pose_motion_gt'] = ops.sub(coeff_gt[:, 1:, 64:70], coeff_gt[:, :1, 64:70])  # bs frame_len 6
         batch['ref'] = coeff_gt[:, 0, 64:70]  # bs  6
-        batch['class'] = x_class.unsqueeze(0)  # bs
+        batch['class'] = x_class  # bs
         indiv_mels = x_indiv_mels  # bs seq_len+1 80 16
 
         # forward

@@ -343,21 +343,21 @@ class ParametricFaceModel:
         face_proj = self.to_image(face_vertex)
         landmark = self.get_landmarks(face_proj)
 
-        print("finished computing the landmark.")
+        # print("finished computing the landmark.")
 
         face_texture = self.compute_texture(tex_coeffs)
 
-        print("finished computing the texture.")
+        # print("finished computing the texture.")
 
         face_norm = self.compute_norm(face_shape)
 
-        print("finished computing the norm.")
+        # print("finished computing the norm.")
 
         face_norm_roted = ops.matmul(face_norm, rotation)
         face_color = self.compute_color(
             face_texture, face_norm_roted, gammas)
 
-        print("finished computing the color.")
+        # print("finished computing the color.")
 
         return face_vertex, face_texture, face_color, face_proj, landmark
 

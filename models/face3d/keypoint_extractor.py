@@ -37,15 +37,15 @@ class KeypointExtractor():
                 np.savetxt(os.path.splitext(name)[0]+'.txt', keypoints.reshape(-1))
             return keypoints
         else:
-            while True:
-                # try:
+            try:
                 # face detection -> face alignment
+
                 img = images.asnumpy() if isinstance(images, ms.Tensor) else np.array(images)
                 bboxes = self.det_net.detect_faces(images, 0.97)
 
                 bboxes = bboxes[0]
                 img = img[int(bboxes[1]):int(bboxes[3]),
-                          int(bboxes[0]):int(bboxes[2]), :]
+                        int(bboxes[0]):int(bboxes[2]), :]
 
                 keypoints = landmark_98_to_68(
                     self.detector.get_landmarks(img))  # [0]
@@ -54,20 +54,11 @@ class KeypointExtractor():
                 keypoints[:, 0] += int(bboxes[0])
                 keypoints[:, 1] += int(bboxes[1])
 
-                break
+            except Exception as e:
+                print(e)
+                shape = [68, 2]
+                keypoints = -1. * np.ones(shape)
 
-                # except RuntimeError as e:
-                #     if str(e).startswith('CUDA'):
-                #         print("Warning: out of memory, sleep for 1s")
-                #         time.sleep(1)
-                #     else:
-                #         print(e)
-                #         break
-                # except TypeError:
-                #     print('No face detected in this image')
-                #     shape = [68, 2]
-                #     keypoints = -1. * np.ones(shape)
-                #     break
             if name is not None:
                 np.savetxt(os.path.splitext(name)[
                            0]+'.txt', keypoints.reshape(-1))

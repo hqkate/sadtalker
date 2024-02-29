@@ -158,7 +158,7 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
             )
 
             out = self.deform_input(feature_3d, dense_motion_deform)
-            dense_motion_deform = dense_motion_deform.astype(ms.float16)
+            # dense_motion_deform = dense_motion_deform.astype(ms.float16)
             out = ops.grid_sample(feature_3d, dense_motion_deform)
 
             bs, c, d, h, w = out.shape

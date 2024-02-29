@@ -40,7 +40,10 @@ def facerender_trainer(
 
 def train(args, config):
     context.set_context(
-        mode=context.GRAPH_MODE, pynative_synchronize=True, device_target="Ascend", device_id=args.device_id
+        mode=context.GRAPH_MODE,
+        pynative_synchronize=True,
+        device_target="CPU",
+        device_id=args.device_id
     )
 
     save_dir = os.path.join(args.result_dir, strftime("%Y_%m_%d_%H.%M.%S"))
@@ -51,7 +54,7 @@ def train(args, config):
     feat_extractor = CropAndExtract(config.preprocess)
 
     # amp level
-    amp_level = config.system.get("amp_level", "O2")
+    amp_level = config.system.get("amp_level", "O0")
     auto_mixed_precision(animate_model, amp_level)
 
     # dataset

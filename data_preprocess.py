@@ -10,15 +10,13 @@ from utils.arg_parser import parse_args_and_config
 args, cfg = parse_args_and_config()
 
 from mindspore import context
-from train_expnet import init_path
 from utils.get_file import get_img_paths
 from utils.preprocess import CropAndExtract
-from datasets.dataset_audio2coeff import TestDataset
 from models.audio2coeff import Audio2Coeff
 
 
-# template = "./ffmpeg-6.0-amd64-static/ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
-template = "ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
+template = "./ffmpeg-6.0-amd64-static/ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
+# template = "ffmpeg -loglevel panic -y -i {} -strict -2 {}"  # for save audio
 
 
 def extract_audios_from_videos_multi(video_paths, audio_save_dir, video_org_dir):
@@ -80,41 +78,53 @@ if __name__ == "__main__":
         mode=config.system.mode, device_target="Ascend", device_id=int(args.device_id)
     )
 
-    # 预处理结果保存的路径
-    preprocess_save_dir = "/disk1/katekong/sadtalker/data_train/"
+    # save dir of the preprocessing results
+    preprocess_save_dir = "/disk1/katekong/datasets/voxceleb/"
     os.makedirs(preprocess_save_dir, exist_ok=True)
 
-    # #step1:提取audio
-    input_dir = "/disk1/katekong/sadtalker/data_train/video/"
-    video_org_dir = "/disk1/katekong/sadtalker/data_train/video/"
-    audio_save_dir = preprocess_save_dir + "/audio/"
+    # #step1: extract audio
+    input_dir = "/disk1/katekong/datasets/voxceleb/mp4/"
+    video_org_dir = "/disk1/katekong/datasets/voxceleb/mp4/"
+    audio_save_dir = preprocess_save_dir + "/aac/"
     coeff_save_dir = preprocess_save_dir + "/coeffs/"
     video_paths = get_img_paths(input_dir, ext="mp4")
     # extract_audios_from_videos_multi(video_paths, audio_save_dir, video_org_dir)
 
-    # step2： 这将花费相当长的时间
-    # 读取预处理模型
+    # step2：extract frames and pose coeffs
+    # load pre-trained model
     checkpoint_dir = "./checkpoints"
     config_dir = "./config/"
     size = 256
     old_version = False
     preprocess = "crop"
-    ngpu = 1  # 采用GPU的数量
-    fa = [CropAndExtract(config.preprocess) for _ in range(ngpu)]  # 构建GPU
+    ngpu = 1
+    fa = [CropAndExtract(config.preprocess) for _ in range(ngpu)]  # jobs
 
-    pose_save_dir = preprocess_save_dir + "/pose/"  # 保存ρ的路径
+    pose_save_dir = preprocess_save_dir + "/pose/"  # Path to save ρ
     os.makedirs(pose_save_dir, exist_ok=True)
     jobs = [
         (vfile, pose_save_dir, video_org_dir, i % ngpu)
         for i, vfile in enumerate(video_paths)
     ]
-    p = ThreadPoolExecutor(ngpu)
-    futures = [p.submit(mp_handler, j) for j in jobs]
-    _ = [r.result() for r in tqdm(as_completed(futures), total=len(futures))]
+    # p = ThreadPoolExecutor(ngpu)
+    # futures = [p.submit(mp_handler, j) for j in jobs]
+    # _ = [r.result() for r in tqdm(as_completed(futures), total=len(futures))]
+
+    # create a thread pool
+    with ThreadPoolExecutor(ngpu) as executor:
+        # execute our task
+        futures = [executor.submit(mp_handler, j) for j in jobs]
+
+        for r in tqdm(as_completed(futures), total=len(futures)):
+            # get the result from the task
+            try:
+                result = r.result()
+            except Exception:
+                print('Unable to get the result')
 
     # step3: audio2coeff
     audio_to_coeff = Audio2Coeff(config)
-    fa_audio2coeff = [audio_to_coeff for _ in range(ngpu)]  # 构建GPU
+    fa_audio2coeff = [audio_to_coeff for _ in range(ngpu)]  # jobs
 
     predcoeff_save_dir = preprocess_save_dir + "/pred_coeffs/"
     os.makedirs(predcoeff_save_dir, exist_ok=True)

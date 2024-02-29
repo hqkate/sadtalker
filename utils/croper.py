@@ -23,6 +23,10 @@ class Preprocesser:
         """get landmark with dlib
         :return: np.array shape=(68, 2)
         """
+
+        if img_np.size == 0:
+            return None
+
         dets = self.predictor.det_net.detect_faces(img_np, 0.97)
 
         if len(dets) == 0:
@@ -30,6 +34,8 @@ class Preprocesser:
         det = dets[0]
 
         img = img_np[int(det[1]) : int(det[3]), int(det[0]) : int(det[2]), :]
+        if img.size == 0:
+            return None
         lm = landmark_98_to_68(self.predictor.detector.get_landmarks(img))  # [0]
 
         # keypoints to the original location
@@ -136,7 +142,7 @@ class Preprocesser:
         img_np = img_np_list[0]
         lm = self.get_landmark(img_np)
 
-        print("finished getting the landmark of face.")
+        # print("finished getting the landmark of face.")
 
         if lm is None:
             raise "can not detect the landmark from source image"
@@ -144,7 +150,7 @@ class Preprocesser:
             img=Image.fromarray(img_np), lm=lm, output_size=xsize
         )
 
-        print("finished aligning the face.")
+        # print("finished aligning the face.")
 
         clx, cly, crx, cry = crop
         lx, ly, rx, ry = quad

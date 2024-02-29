@@ -107,7 +107,7 @@ class PoseVAELoss(nn.LossBase):
         super().__init__(reduction)
         self.mse = nn.MSELoss()
         self.kl = nn.KLDivLoss()
-        self.adversarial_loss = nn.BCELoss(reduction='mean')
+        self.adversarial_loss = nn.BCEWithLogitsLoss(reduction='mean')
 
     def construct(self, batch):
 

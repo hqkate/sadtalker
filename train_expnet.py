@@ -11,35 +11,14 @@ from utils.preprocess import CropAndExtract
 from utils.callbacks import EvalSaveCallback
 from datasets.dataset_audio2coeff import TrainAudioCoeffDataset
 
-from models.face3d.networks import define_net_recon
 from models.audio2exp.expnet import ExpNet
-from models.wav2lip.wav2lip import Wav2Lip
 from models.audio2exp.audio2exp import Audio2Exp
 from models.audio2exp.trainer import ExpNetWithLossCell, ExpNetTrainer
 
 
 def expnet_trainer(audio2exp, optimizer, config, args):
-    # load wav2lip model
-    wav2lip = Wav2Lip()
-    checkpoint_dir = config.audio2exp.path.checkpoint_dir
-    path_wav2lip = os.path.join(
-        checkpoint_dir, config.audio2exp.path.wav2lip_checkpoint
-    )
-    param_dict = ms.load_checkpoint(path_wav2lip)
-    ms.load_param_into_net(wav2lip, param_dict)
-    wav2lip.set_train(False)
 
-    # load 3DMM Encoder
-    coeff_enc = define_net_recon(net_recon="resnet50", use_last_fc=False, init_path="")
-    checkpoint_dir = config.preprocess.path.checkpoint_dir
-    path_net_recon = os.path.join(
-        checkpoint_dir, config.preprocess.path.path_of_net_recon_model
-    )
-    param_dict = ms.load_checkpoint(path_net_recon)
-    ms.load_param_into_net(coeff_enc, param_dict)
-    coeff_enc.set_train(False)
-
-    expnet_w_loss = ExpNetWithLossCell(audio2exp, wav2lip, coeff_enc, config, args)
+    expnet_w_loss = ExpNetWithLossCell(audio2exp, config, args)
     expnet_t_step = nn.TrainOneStepCell(expnet_w_loss, optimizer)
 
     trainer = ExpNetTrainer(expnet_t_step, config)
@@ -51,7 +30,7 @@ def train(args, config):
     context.set_context(
         mode=context.GRAPH_MODE,
         pynative_synchronize=True,
-        device_target="CPU",
+        device_target="Ascend",
         device_id=args.device_id,
     )
 
@@ -96,7 +75,7 @@ def train(args, config):
     # lr scheduler
     min_lr = 0.0
     max_lr = 0.0005
-    num_epochs = 2
+    num_epochs = 10
     decay_epoch = 2
     total_step = dataloader.get_dataset_size() * num_epochs
     step_per_epoch = dataloader.get_dataset_size()

@@ -17,6 +17,14 @@ class TrainPVAEDataset:
         self.syncnet_T = syncnet_T
         self.syncnet_mel_step_size = syncnet_mel_step_size
 
+    def get_output_columns(self):
+        return [
+            "num_frames",
+            "indiv_mels",
+            "gt",
+            "class",
+        ]
+
     def get_frame_id(self, frame):
         return int(os.path.basename(frame).split("_")[-1].split(".")[0])  #
 
@@ -183,11 +191,12 @@ class TrainPVAEDataset:
         first = ms.Tensor(first_coeff_3dmm.astype(np.float32), ms.float32)
         label = int(label)
 
-        return {
+        data_dict = {
             "num_frames": 32,
-            "indiv_mels": ops.cat((first_indiv_mels, indiv_mels), 0).unsqueeze(0),
+            "indiv_mels": ops.cat((first_indiv_mels, indiv_mels), 0),
             "gt": ops.cat((first, window_coeff_3dmm), 0)[:, :70],
             "class": label,
         }
 
-        # return indiv_mels, ref_coeff, window_coeff_3dmm, label
+        output_tuple = tuple(data_dict[k] for k in self.get_output_columns())
+        return output_tuple

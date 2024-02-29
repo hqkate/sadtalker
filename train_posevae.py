@@ -65,16 +65,16 @@ def train(args, config):
     auto_mixed_precision(net_audio2pose, amp_level)
 
     # create train data loader
-    batch_size = 1
+    batch_size = 2
     train_data_path = "./data_train/images.txt"
     dataset = TrainPVAEDataset(train_data_path)
 
-    dataset_column_names = ["data"]
+    dataset_column_names = dataset.get_output_columns()
     ds = ms.dataset.GeneratorDataset(
         dataset, column_names=dataset_column_names, shuffle=True
     )
     loader_train = ds.batch(
-        batch_size,
+        batch_size=batch_size,
         drop_remainder=True,
     )
 
@@ -93,7 +93,7 @@ def train(args, config):
     # lr scheduler
     min_lr = 0.0
     max_lr = 0.0005
-    num_epochs = 2
+    num_epochs = 10
     decay_epoch = 2
     total_step = loader_train.get_dataset_size() * num_epochs
     step_per_epoch = loader_train.get_dataset_size()

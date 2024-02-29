@@ -287,7 +287,7 @@ class Decoder(nn.Cell):
             has_bias=True,
         )
         self.norm = BatchNorm3d(self.out_filters, affine=True)
-        self.conv.to_float(ms.float16)
+        # self.conv.to_float(ms.float16)
 
     def construct(self, x):
         out = x[-1]
@@ -296,6 +296,8 @@ class Decoder(nn.Cell):
             out = up_block(out)
             idx = 2 + i
             skip = x[-idx]
+            out = out.astype(ms.float32)
+            skip = skip.astype(ms.float32)
             out = ops.cat([out, skip], axis=1)
         # out = self.up_blocks[-1](out)
         out = self.conv(out)

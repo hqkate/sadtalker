@@ -83,12 +83,16 @@ def read_filelist(input_path):
         if ext == "txt":
             with open(input_path, "r") as f:
                 for line in f.read().splitlines():
-                    audio_path, image_dir = line.split(" ")
+                    audio_path, image_path = line.split(" ")
 
-                    if os.path.isfile(audio_path) and os.path.isdir(image_dir):
+                    if os.path.isfile(audio_path) and os.path.isfile(image_path):
                         audios.append(audio_path)
-                        image_paths = glob(os.path.join(image_dir, "*.png"))
-                        images.append(image_paths)
+                        images.append(image_path)
+
+                    # if os.path.isfile(audio_path) and os.path.isdir(image_dir):
+                    #     audios.append(audio_path)
+                    #     image_paths = glob(os.path.join(image_dir, "*.png"))
+                    #     images.append(image_paths)
 
     return audios, images
 
@@ -177,8 +181,7 @@ class AudioCoeffDataset:
             crop_frames
         )
 
-    def _get_idx_seq(self, frame_idx, mel_size):
-        start_frame_num = frame_idx - 2
+    def _get_idx_seq(self, start_frame_num, mel_size):
         start_idx = int(80.0 * (start_frame_num / float(self.fps)))
         end_idx = start_idx + self.syncnet_mel_step_size
         seq = list(range(start_idx, end_idx))
@@ -206,12 +209,20 @@ class AudioCoeffDataset:
                 ms.Tensor(indiv_mels, ms.float32).unsqueeze(1).unsqueeze(0)
             )  # bs T 1 80 16
 
-        else:  # randomly select one frame for training
-            frame_idx = random.choice(range(num_frames))
-            seq = self._get_idx_seq(frame_idx - 2, orig_mel.shape[0])
-            m = spec[seq, :]
-            indiv_mels = np.asarray(m.T)  # T 80 16
-            indiv_mels = ms.Tensor(indiv_mels, ms.float32).unsqueeze(1)  # bs T 1 80 16
+        else:  # randomly select 5 frames for training
+            frame_idx = random.choice(range(5, num_frames))
+            for i in tqdm(range(frame_idx, frame_idx+5), "mel:"):
+                start_frame_num = i - 2
+                seq = self._get_idx_seq(start_frame_num, orig_mel.shape[0])
+                m = spec[seq, :]
+                indiv_mels.append(m.T)
+            indiv_mels = np.asarray(indiv_mels)  # T 80 16
+
+            indiv_mels = (
+                ms.Tensor(indiv_mels, ms.float32).unsqueeze(1)
+            )  # 5 1 80 16
+
+            num_frames = 5
 
         return num_frames, indiv_mels, frame_idx, wav
 
@@ -221,10 +232,9 @@ class AudioCoeffDataset:
         ratio = generate_blink_seq_randomly(num_frames)  # T
         source_semantics_path = first_coeff_path
         source_semantics_dict = scio.loadmat(source_semantics_path)
-        ref_coeff = source_semantics_dict["coeff_3dmm"][:1, :70]  # 1 70
 
-        if not is_train:
-            ref_coeff = np.repeat(ref_coeff, num_frames, axis=0)
+        ref_coeff = source_semantics_dict["coeff_3dmm"][:1, :70]  # 1 70
+        ref_coeff = np.repeat(ref_coeff, num_frames, axis=0)
 
         if ref_eyeblink_coeff_path is not None:
             ratio[:num_frames] = 0
@@ -327,13 +337,13 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "ref",
             "num_frames",
             "ratio_gt",
-            "audio_wav",
+            # "audio_wav",
             "source_image",
-            "target_image",
+            # "target_image",
             "masked_src_img",
         ]
 
-    def process_data(self, image_paths, audio_path):
+    def process_data(self, image_path, audio_path):
 
         frame_idx = 0
 
@@ -345,18 +355,18 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             ref_eyeblink_coeff_path,
             ref_pose_coeff_path,
             crop_frames,
-        ) = self.crop_and_extract(image_paths)
+        ) = self.crop_and_extract(image_path)
 
         # 2. process audio
         if self.idlemode:
             num_frames = int(self.length_of_audio * self.fps)
             indiv_mels = np.zeros((num_frames, num_frames, self.syncnet_mel_step_size))
         else:
-            _, indiv_mels, frame_idx, audio_wav = self.process_audio(audio_path, is_train=True)  # bs T 1 80 16
+            num_frames, indiv_mels, frame_idx, audio_wav = self.process_audio(audio_path, is_train=True)  # bs T 1 80 16
 
         # 3. generate ref coeffs
         ratio, ref_coeff = self.gen_ref_coeffs(
-            1, first_coeff_path, ref_eyeblink_coeff_path, is_train=True
+            num_frames, first_coeff_path, ref_eyeblink_coeff_path, is_train=True
         )
 
         # 4. images
@@ -365,8 +375,8 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         src_image_ts = ms.Tensor(img_as_float32(src_image))
 
         # crop target image (ground truth) according to source image
-        tgt_image = crop_frames[frame_idx]
-        tgt_image = ms.Tensor(img_as_float32(tgt_image))
+        # tgt_image = crop_frames[frame_idx]
+        # tgt_image = ms.Tensor(img_as_float32(tgt_image))
 
         # mask image for wav2lip
         img_size = 96
@@ -375,12 +385,13 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         masked_image = cv2.resize(masked_image, (img_size, img_size))
         masked_image[:, img_size // 2 :] = 0.0
         masked_src_img = np.concatenate((masked_image, src_image_resized), axis=2) / 255.0
-        masked_src_img = ms.Tensor(np.transpose(masked_src_img, (2, 0, 1)), ms.float32)
+        masked_src_img = np.repeat(np.expand_dims(np.transpose(masked_src_img, (2, 0, 1)), 0), num_frames, axis=0)
+        masked_src_img = ms.Tensor(masked_src_img, ms.float32)
 
         data_dict = {
             "indiv_mels": indiv_mels,
             "ref": ref_coeff,
-            "num_frames": 1,
+            "num_frames": num_frames,
             "frame_idx": frame_idx,
             "ratio_gt": ratio,
             "audio_wav": audio_wav,
@@ -390,7 +401,7 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "crop_info": crop_info,
             "masked_src_img": masked_src_img,
             "source_image": src_image_ts,
-            "target_image": tgt_image,
+            # "target_image": tgt_image,
         }
 
         return data_dict
@@ -412,5 +423,14 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
 
         data_dict = self.process_data(image_paths, audio_path)
         output_tuple = tuple(data_dict[k] for k in self.get_output_columns())
-
         return output_tuple
+
+        # while True:
+        #     try:
+        #         data_dict = self.process_data(image_paths, audio_path)
+        #         output_tuple = tuple(data_dict[k] for k in self.get_output_columns())
+        #         return output_tuple
+
+        #     except Exception as e:
+        #         random_idx = random.choice(list(range(len(self.audios))))
+        #         return self.__getitem__(random_idx)
