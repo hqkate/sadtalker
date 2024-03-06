@@ -242,11 +242,12 @@ class AnimateModel(nn.Cell):
     Merge all generator related updates into single model for better multi-gpu usage
     """
 
-    def __init__(self, config):
+    def __init__(self, config, batch_size):
         super(AnimateModel, self).__init__()
 
         generator = OcclusionAwareSPADEGenerator(
-            **config.model_params.generator_params, **config.model_params.common_params
+            **config.model_params.generator_params, **config.model_params.common_params,
+            batch_size=batch_size,
         )
         kp_extractor = KPDetector(
             **config.model_params.kp_detector_params,
@@ -280,6 +281,7 @@ class AnimateModel(nn.Cell):
         # keypoint rotation
         # kp_rotated = ms.Tensor(np.einsum("bmp,bkp->bkm", rot_mat.asnumpy(), kp.asnumpy()))
         rot_mat = ops.Cast()(rot_mat, ms.float32)
+        kp_value = ops.Cast()(kp_value, ms.float32)
         kp_rotated = ops.BatchMatMul(transpose_b=True)(rot_mat, kp_value).transpose(
             0, 2, 1
         )

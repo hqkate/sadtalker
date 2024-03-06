@@ -45,13 +45,15 @@ class InstanceNorm2d(nn.Cell):
     def construct(self, x):
         """calculate InstanceNorm output"""
         mean = ops.ReduceMean(keep_dims=True)(x, (2, 3))
-        mean = self.cast(mean, ms.float32)
+        # mean = self.cast(mean, ms.float32)
         tmp = x - mean
         tmp = tmp * tmp
         var = ops.ReduceMean(keep_dims=True)(tmp, (2, 3))
         std = self.sqrt(var + self.eps)
-        gamma_t = self.cast(self.gamma, ms.float32)
-        beta_t = self.cast(self.beta, ms.float32)
+        # gamma_t = self.cast(self.gamma, ms.float32)
+        # beta_t = self.cast(self.beta, ms.float32)
+        gamma_t = self.gamma
+        beta_t = self.beta
         x = (x - mean) / std * gamma_t.reshape(1, -1, 1, 1) + beta_t.reshape(
             1, -1, 1, 1
         )

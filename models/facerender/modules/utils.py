@@ -1,4 +1,5 @@
 import mindspore as ms
+import numpy as np
 from mindspore import nn, ops
 from mindspore import dtype as mstype
 
@@ -7,24 +8,37 @@ from models.facerender.modules.spectralnorm import Conv2dNormalized
 from models.facerender.modules.instancenorm import InstanceNorm2d
 
 
-def kp2gaussian(mean, spatial_size, kp_variance):
+def kp2gaussian(mean, coordinate_grid, kp_variance):
     """
     Transform a keypoint into gaussian like representation
     """
-    coordinate_grid = make_coordinate_grid(spatial_size, mean.dtype)
-    number_of_leading_dimensions = len(mean.shape) - 1
-    shape = (1,) * number_of_leading_dimensions + coordinate_grid.shape
-    coordinate_grid = coordinate_grid.view(shape)
-    repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 1)
+    # coordinate_grid = make_coordinate_grid(spatial_size)
 
-    for i, num in enumerate(repeats):
-        coordinate_grid = ops.cat([coordinate_grid] * num, axis=i)
+    bs, num_kp, _ = mean.shape
 
-    # Preprocess kp shape
-    shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 3)
-    mean = mean.view(shape)
+    mean_sub_mts = []
+    for i in range(bs):
+        coordinate_per_sample = []
+        for j in range(num_kp):
+            res_coordinate = coordinate_grid - mean[i][j] # (16, 64, 64, 3)
+            coordinate_per_sample.append(res_coordinate)
+        coordinate_per_sample = ops.stack(coordinate_per_sample, 0)
+        mean_sub_mts.append(coordinate_per_sample)
+    mean_sub = ops.stack(mean_sub_mts, 0)
 
-    mean_sub = coordinate_grid - mean
+    # number_of_leading_dimensions = len(mean.shape) - 1
+    # shape = (1,) * number_of_leading_dimensions + coordinate_grid.shape
+    # coordinate_grid = coordinate_grid.view(shape)
+    # repeats = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 1)
+
+    # for i, num in enumerate(repeats):
+    #     coordinate_grid = ops.cat([coordinate_grid] * num, axis=i)
+
+    # # Preprocess kp shape
+    # shape = mean.shape[:number_of_leading_dimensions] + (1, 1, 1, 3)
+    # mean = mean.view(shape)
+
+    # mean_sub = coordinate_grid - mean
 
     out = ops.exp(-0.5 * (mean_sub**2).sum(-1) / kp_variance)
 
@@ -50,20 +64,20 @@ def make_coordinate_grid_2d(spatial_size, type):
     return meshed
 
 
-def make_coordinate_grid(spatial_size, type=None):
-    d, h, w = spatial_size
+def make_coordinate_grid(spatial_size):
+    dd, hh, ww = spatial_size
 
-    x = ops.arange(w)
-    y = ops.arange(h)
-    z = ops.arange(d)
+    x = ops.arange(ww, dtype=ms.float32)
+    y = ops.arange(hh, dtype=ms.float32)
+    z = ops.arange(dd, dtype=ms.float32)
 
-    x = 2.0 * (x / (w - 1.0)) - 1.0
-    y = 2.0 * (y / (h - 1.0)) - 1.0
-    z = 2.0 * (z / (d - 1.0)) - 1.0
+    x = 2.0 * (x / (ww - 1.0)) - 1.0
+    y = 2.0 * (y / (hh - 1.0)) - 1.0
+    z = 2.0 * (z / (dd - 1.0)) - 1.0
 
-    yy = y.view(1, -1, 1).repeat(d, axis=0).repeat(w, axis=2)
-    xx = x.view(1, 1, -1).repeat(d, axis=0).repeat(h, axis=1)
-    zz = z.view(-1, 1, 1).repeat(h, axis=1).repeat(w, axis=2)
+    yy = y.view(1, -1, 1).repeat(dd, axis=0).repeat(ww, axis=2)
+    xx = x.view(1, 1, -1).repeat(dd, axis=0).repeat(hh, axis=1)
+    zz = z.view(-1, 1, 1).repeat(hh, axis=1).repeat(ww, axis=2)
 
     meshed = ops.cat([xx.unsqueeze(3), yy.unsqueeze(3), zz.unsqueeze(3)], 3)
 
@@ -159,7 +173,8 @@ class UpBlock3d(nn.Cell):
     def construct(self, x):
         n, c, d, h, w = x.shape
         x = x.view(-1, d, h, w)
-        out = ops.interpolate(x, size=(h*2, w*2))
+        # out = ops.interpolate(x, size=(h*2, w*2))
+        out = ops.ResizeNearestNeighbor(size=(h*2, w*2))(x)
         out = out.view(n, c, d, h*2, w*2)
         # out = ops.interpolate(x, scale_factor=(1.0, 2.0, 2.0), mode="area")
 
@@ -294,7 +309,7 @@ class Decoder(nn.Cell):
         # for up_block in self.up_blocks[:-1]:
         for i, up_block in enumerate(self.up_blocks):
             out = up_block(out)
-            idx = 2 + i
+            idx = int(2 + i)
             skip = x[-idx]
             out = out.astype(ms.float32)
             skip = skip.astype(ms.float32)
@@ -442,6 +457,7 @@ class SPADE(nn.Cell):
     def construct(self, x, segmap):
         normalized = self.param_free_norm(x)
         segmap = ops.interpolate(segmap, size=x.shape[2:], mode="nearest")
+        # segmap = ops.ResizeNearestNeighbor(size=x.shape[2:])(segmap)
         actv = self.mlp_shared(segmap)
         gamma = self.mlp_gamma(actv)
         beta = self.mlp_beta(actv)
@@ -510,7 +526,6 @@ class SPADEResnetBlock(nn.Cell):
 
     def construct(self, x, seg1):
         x_s = self.shortcut(x, seg1)
-
         normalized_0 = self.norm_0(x, seg1)
         dx = self.conv_0(self.actvn(normalized_0))
 
@@ -528,7 +543,7 @@ class SPADEResnetBlock(nn.Cell):
         return x_s
 
     def actvn(self, x):
-        return ops.leaky_relu(x, alpha=2e-1)
+        return ops.leaky_relu(x, alpha=0.2)
 
 
 class AntiAliasInterpolation2d(nn.Cell):

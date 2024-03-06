@@ -61,6 +61,7 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
         reshape_channel,
         reshape_depth,
         num_resblocks,
+        batch_size,
         estimate_occlusion_map=False,
         dense_motion_params=None,
         estimate_jacobian=False,
@@ -72,6 +73,7 @@ class OcclusionAwareSPADEGenerator(nn.Cell):
                 num_kp=num_kp,
                 feature_channel=feature_channel,
                 estimate_occlusion_map=estimate_occlusion_map,
+                batch_size=batch_size,
                 **dense_motion_params
             )
 

@@ -41,8 +41,7 @@ def facerender_trainer(
 def train(args, config):
     context.set_context(
         mode=context.GRAPH_MODE,
-        pynative_synchronize=True,
-        device_target="CPU",
+        device_target="Ascend",
         device_id=args.device_id
     )
 
@@ -50,7 +49,7 @@ def train(args, config):
     os.makedirs(save_dir, exist_ok=True)
 
     # init model
-    animate_model = AnimateModel(config.facerender)
+    animate_model = AnimateModel(config.facerender, args.batch_size)
     feat_extractor = CropAndExtract(config.preprocess)
 
     # amp level

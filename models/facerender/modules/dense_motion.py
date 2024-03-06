@@ -20,6 +20,7 @@ class DenseMotionNetwork(nn.Cell):
         feature_channel,
         reshape_depth,
         compress,
+        batch_size,
         estimate_occlusion_map=False,
     ):
         super(DenseMotionNetwork, self).__init__()
@@ -59,32 +60,40 @@ class DenseMotionNetwork(nn.Cell):
         self.num_kp = num_kp
         self.mask.to_float(ms.float16)
         self.compress.to_float(ms.float16)
+        self.identity_grid = make_coordinate_grid((16, 64, 64))
+        self.batch_size = batch_size
 
     def create_sparse_motions(self, feature, kp_driving, kp_source):
 
-        bs, _, d, h, w = feature.shape
+        # identity_grid = make_coordinate_grid((d, h, w))
+        identity_grid = self.identity_grid.copy()
 
-        identity_grid = make_coordinate_grid((d, h, w))
+        # coordinate_mts = []
+        drive2source_mts = []
+        for i in range(self.batch_size):
+            # coordinate_per_sample = []
+            drive2source_per_sample = []
+            for j in range(self.num_kp):
+                res_coordinate = self.identity_grid - kp_driving[i][j] # (16, 64, 64, 3)
+                res_drive2source = res_coordinate + kp_source[i][j] # (16, 64, 64, 3)
+                # coordinate_per_sample.append(res_coordinate)
+                drive2source_per_sample.append(res_drive2source)
+            # coordinate_per_sample = ops.stack(coordinate_per_sample, 0)
+            drive2source_per_sample = ops.stack(drive2source_per_sample, 0)
+            # coordinate_mts.append(coordinate_per_sample)
+            drive2source_mts.append(drive2source_per_sample)
+        # coordinate_grid = ops.stack(coordinate_mts, 0)
+        driving_to_source = ops.stack(drive2source_mts, 0)
 
-        # trail convert to 4d
-        # identity_grid = identity_grid.view(-1, 3)
-        # identity_grid = identity_grid.unsqueeze(0).unsqueeze(0) # (1, 1, 16*64*64, 3)
-        # coordinate_grid = ops.sub(identity_grid, kp_driving.unsqueeze(2)) # (bs, self.num_kp, 1, 3) -> (bs, self.num_kp, 16*64*64, 3)
-        # driving_to_source = coordinate_grid + kp_source.unsqueeze(2) # (bs, num_kp, d*h*w, 3)
-
-        # coordinate_grid = coordinate_grid.view(bs, self.num_kp, d, h, w, 3)
-        # driving_to_source = driving_to_source.view(bs, self.num_kp, d, h, w, 3)
-        # identity_grid = identity_grid.view(1, 1, d, h, w, 3).repeat(bs, 0)
-
-        identity_grid = identity_grid.unsqueeze(0).unsqueeze(0) # (1, 1, 16, 64, 64, 3)
-        identity_grid = identity_grid.repeat(bs, 0)
-        coordinate_grid = identity_grid - kp_driving.unsqueeze(2).unsqueeze(2).unsqueeze(2) # (bs, self.num_kp, 1, 1, 1, 3)
-        driving_to_source = coordinate_grid + kp_source.view(
-            bs, self.num_kp, 1, 1, 1, 3
-        )  # (bs, num_kp, d, h, w, 3)
+        # identity_grid = identity_grid.unsqueeze(0).unsqueeze(0) # (1, 1, 16, 64, 64, 3)
+        # identity_grid = identity_grid.repeat(bs, 0).repeat(self.num_kp, 1)
+        # coordinate_grid = identity_grid - kp_driving.unsqueeze(2).unsqueeze(2).unsqueeze(2) # (bs, self.num_kp, 1, 1, 1, 3)
+        # driving_to_source = coordinate_grid + kp_source.view(
+        #     bs, self.num_kp, 1, 1, 1, 3
+        # )  # (bs, num_kp, d, h, w, 3)
 
         # adding background feature
-        # identity_grid = ops.cat([identity_grid] * bs, axis=0)
+        identity_grid = ops.cat([identity_grid.unsqueeze(0).unsqueeze(0)] * self.batch_size, axis=0)
         sparse_motions = ops.cat(
             [identity_grid, driving_to_source], axis=1
         )  # bs num_kp+1 d h w 3
@@ -113,10 +122,10 @@ class DenseMotionNetwork(nn.Cell):
     def create_heatmap_representations(self, feature, kp_driving, kp_source):
         spatial_size = feature.shape[3:]
         gaussian_driving = kp2gaussian(
-            kp_driving, spatial_size=spatial_size, kp_variance=0.01
+            kp_driving, self.identity_grid, kp_variance=0.01
         )
         gaussian_source = kp2gaussian(
-            kp_source, spatial_size=spatial_size, kp_variance=0.01
+            kp_source, self.identity_grid, kp_variance=0.01
         )
         heatmap = gaussian_driving - gaussian_source
 

@@ -27,6 +27,8 @@ class ExpNetWithLossCell(nn.Cell):
         self.bfm1 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
         self.bfm2 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
 
+        # self.bfm = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
+
         # lipreading_video = get_lipreading_model("video")
         # lipreading_audio = get_lipreading_model("audio")
         # lipreading_renderer = renderer
@@ -69,12 +71,12 @@ class ExpNetWithLossCell(nn.Cell):
         exp_coeff_wav2lip = coeffs[1]
 
         new_coeffs = (
-            coeffs[0],
+            coeffs[0].copy(),
             exp_coeff_pred.view(-1, 64),
-            coeffs[2],
-            coeffs[3],
-            coeffs[4],
-            coeffs[5],
+            coeffs[2].copy(),
+            coeffs[3].copy(),
+            coeffs[4].copy(),
+            coeffs[5].copy(),
         )
 
         # distill loss (lip-only coefficients, MSE)

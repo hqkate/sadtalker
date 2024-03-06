@@ -29,8 +29,8 @@ def expnet_trainer(audio2exp, optimizer, config, args):
 def train(args, config):
     context.set_context(
         mode=context.GRAPH_MODE,
-        pynative_synchronize=True,
-        device_target="Ascend",
+        # pynative_synchronize=True,
+        device_target="CPU",
         device_id=args.device_id,
     )
 

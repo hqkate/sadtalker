@@ -89,7 +89,7 @@ class KPDetector(nn.Cell):
         """
         shape = heatmap.shape
         heatmap = heatmap.unsqueeze(-1)
-        grid = make_coordinate_grid(shape[2:], heatmap.dtype).unsqueeze(0).unsqueeze(0)
+        grid = make_coordinate_grid(shape[2:]).unsqueeze(0).unsqueeze(0)
         value = ops.sum(heatmap * grid, dim=(2, 3, 4))
 
         return value

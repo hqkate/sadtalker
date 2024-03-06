@@ -34,12 +34,13 @@ class SpectralNormAscendOpt(nn.Cell):
         """
         return ops.MatMul(True, False)(u, ops.MatMul(False, False)(w, v))
 
-    def bprop(self, w, u, v, out, dout):
-        """
-        Computes gradient as u * v.T.
-        """
-        res = dout * u * v.reshape(1, -1)
-        return res, None, None
+    # def bprop(self, w, u, v, out, dout):
+    #     """
+    #     Computes gradient as u * v.T.
+    #     """
+    #     res = dout * u * v.reshape(1, -1)
+    #     # res = ops.MatMul(False, False)(dout, ops.MatMul(False, False)(u, v.reshape(1, -1)))
+    #     return res, None, None
 
 
 class SpectralNorm(nn.Cell):

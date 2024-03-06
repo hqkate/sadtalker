@@ -50,7 +50,8 @@ class LandmarksLoss(nn.LossBase):
             ratio_gt: bs, T, 1
         """
         loss_eye = self.get_eye_loss(landmarks_rep, ratio_gt)
-        loss_point = ops.mean(ops.dist(landmarks_ori, landmarks_rep, 2))
+        # loss_point = ops.mean(ops.dist(landmarks_ori, landmarks_rep, 2))
+        loss_point = 0.0
 
         loss = 200.0 * loss_eye + loss_point
 
