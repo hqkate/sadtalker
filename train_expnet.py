@@ -14,11 +14,15 @@ from datasets.dataset_audio2coeff import TrainAudioCoeffDataset
 from models.audio2exp.expnet import ExpNet
 from models.audio2exp.audio2exp import Audio2Exp
 from models.audio2exp.trainer import ExpNetWithLossCell, ExpNetTrainer
+from models.audio2exp.utils import get_recon_model, get_wav2lip_model
+from models.face3d.bfm import ParametricFaceModel
 
 
 def expnet_trainer(audio2exp, optimizer, config, args):
 
-    expnet_w_loss = ExpNetWithLossCell(audio2exp, config, args)
+    bfm = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting", is_train=False)
+
+    expnet_w_loss = ExpNetWithLossCell(audio2exp, bfm, config, args)
     expnet_t_step = nn.TrainOneStepCell(expnet_w_loss, optimizer)
 
     trainer = ExpNetTrainer(expnet_t_step, config)
@@ -29,8 +33,8 @@ def expnet_trainer(audio2exp, optimizer, config, args):
 def train(args, config):
     context.set_context(
         mode=context.GRAPH_MODE,
-        # pynative_synchronize=True,
-        device_target="CPU",
+        pynative_synchronize=True,
+        device_target="Ascend",
         device_id=args.device_id,
     )
 
@@ -51,6 +55,10 @@ def train(args, config):
 
     audio2exp_model.set_train(True)
 
+    # load wav2lip model
+    wav2lip = get_wav2lip_model(config)
+    coeff_enc = get_recon_model(config)
+
     # amp level
     amp_level = config.system.get("amp_level", "O0")
     auto_mixed_precision(audio2exp_model, amp_level)
@@ -60,6 +68,8 @@ def train(args, config):
         args=args,
         preprocessor=preprocess_model,
         save_dir=save_dir,
+        model_wav2lip=wav2lip,
+        model_coeff_enc=coeff_enc,
     )
 
     dataset_column_names = ds_train.get_output_columns()

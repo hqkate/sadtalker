@@ -1,33 +1,24 @@
 import os
+import numpy as np
+import mindspore as ms
 from mindspore import ops, nn
-from mindspore.nn import TrainOneStepCell
 
 from utils.preprocess import split_coeff
 from losses.expnet_loss import LandmarksLoss, LipReadingLoss
-from models.face3d.bfm import ParametricFaceModel
-from models.lipreading import get_lipreading_model
-from models.external.face3d.face_renderer import renderer
+
+# from models.lipreading import get_lipreading_model
+# from models.external.face3d.face_renderer import renderer
 from models.audio2exp.utils import get_recon_model, get_wav2lip_model
 
 
 class ExpNetWithLossCell(nn.Cell):
     """Generator with loss cell"""
 
-    def __init__(self, expnet, cfg, args):
+    def __init__(self, expnet, bfm, cfg, args):
         super().__init__()
         self.expnet = expnet
+        self.bfm = bfm
         self.cfg = cfg
-
-        wav2lip = get_wav2lip_model(cfg)
-        coeff_enc = get_recon_model(cfg)
-
-        self.wav2lip = wav2lip
-        self.coeff_enc = coeff_enc
-
-        self.bfm1 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
-        self.bfm2 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
-
-        # self.bfm = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
 
         # lipreading_video = get_lipreading_model("video")
         # lipreading_audio = get_lipreading_model("audio")
@@ -52,42 +43,32 @@ class ExpNetWithLossCell(nn.Cell):
         current_mel_input,
         curr_ref,
         ratio_gt,
-        first_frame_img,
-        # audio_wav,
+        coeffs
     ):
-        audiox = current_mel_input.view(-1, 1, 80, 16)
-        first_frame_img = first_frame_img.view(-1, 6, 96, 96)
-
         # expnet
         exp_coeff_pred = self.expnet(current_mel_input, curr_ref, ratio_gt)
 
-        # wav2lip
-        img_with_lip = self.wav2lip(audiox, first_frame_img)  # bs*T, 3, 96, 96
-
-        wav2lip_coeff = self.coeff_enc(img_with_lip)
-
-        # replace coeffs
-        coeffs = split_coeff(wav2lip_coeff)
+        # # replace coeffs
         exp_coeff_wav2lip = coeffs[1]
 
         new_coeffs = (
-            coeffs[0].copy(),
+            coeffs[0],
             exp_coeff_pred.view(-1, 64),
-            coeffs[2].copy(),
-            coeffs[3].copy(),
-            coeffs[4].copy(),
-            coeffs[5].copy(),
+            coeffs[2],
+            coeffs[3],
+            coeffs[4],
+            coeffs[5],
         )
 
         # distill loss (lip-only coefficients, MSE)
         loss_distill = self.distill_loss(exp_coeff_pred.view(-1, 64), exp_coeff_wav2lip)
 
         # landmarks loss (eyes)
-        render_results_1 = self.bfm1.compute_for_render_new(coeffs)  # bs*T, 68, 2
-        landmarks_w2l = render_results_1[-1]
+        landmarks_w2l = self.bfm.compute_for_render_landmarks(coeffs)  # bs*T, 68, 2
+        # landmarks_w2l = render_results_1[-1]
 
-        render_results_2 = self.bfm2.compute_for_render_new(new_coeffs)
-        landmarks_rep = render_results_2[-1]
+        landmarks_rep = self.bfm.compute_for_render_landmarks(new_coeffs)
+        # landmarks_rep = render_results_2[-1]
 
         # face_vertex = render_results_2[0]
         # face_texture = render_results_2[1]
@@ -121,17 +102,32 @@ class ExpNetTrainer:
         self.train_one_step = train_one_step
         self.cfg = cfg
 
+        # load wav2lip model
+        wav2lip = get_wav2lip_model(cfg)
+        coeff_enc = get_recon_model(cfg)
+
+        self.wav2lip = wav2lip
+        self.coeff_enc = coeff_enc
+
     def run(self, data_batch):
         current_mel_input = data_batch["indiv_mels"]
         curr_ref = data_batch["ref"][:, :, :64]
         ratio_gt = data_batch["ratio_gt"]
-        first_frame_img = data_batch["masked_src_img"]
-        # audio_wav = data_batch["audio_wav"]
+        masked_src_img = data_batch["masked_src_img"]
+
+        # get wav2lip coeffs
+        audiox = current_mel_input.view(-1, 1, 80, 16)
+        first_frame_img = masked_src_img.view(-1, 6, 96, 96)
+        img_with_lip = self.wav2lip(audiox, first_frame_img)  # bs*T, 3, 96, 96
+        wav2lip_coeff = self.coeff_enc(img_with_lip)
+
+        # replace coeffs
+        coeffs = split_coeff(wav2lip_coeff)
 
         print("running train_one_step ...")
         self.train_one_step.set_train(True)
         loss_g = self.train_one_step(
-            current_mel_input, curr_ref, ratio_gt, first_frame_img
+            current_mel_input, curr_ref, ratio_gt, coeffs
         )
         return loss_g
 

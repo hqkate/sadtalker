@@ -5,6 +5,14 @@ import mindspore.dataset.vision as vision
 from mindspore.dataset.transforms import Compose
 
 
+def get_point_dist(grid, i, j):
+    res = ops.sum(
+        (grid[:, i] - grid[:, j]) ** 2,
+        1,
+    )
+    return res
+
+
 class NormalizeUtterance:
     """Normalize per raw audio by removing the mean and divided by the standard deviation"""
 
@@ -22,20 +30,17 @@ class LandmarksLoss(nn.LossBase):
     def get_eye_ratio(self, points):
         # (B, 68, 2)
 
-        width = (
-            ops.dist(points[:, 39, :], points[:, 36, :])
-            + ops.dist(points[:, 45, :], points[:, 42, :])
-        ) / 2.0
+        width = (get_point_dist(points, 39, 36) + get_point_dist(points, 45, 42)) / 2.0
 
         height = (
-            ops.dist(points[:, 37, :], points[:, 40, :])
-            + ops.dist(points[:, 38, :], points[:, 41, :])
-            + ops.dist(points[:, 43, :], points[:, 46, :])
-            + ops.dist(points[:, 44, :], points[:, 47, :])
+            get_point_dist(points, 37, 40)
+            + get_point_dist(points, 38, 41)
+            + get_point_dist(points, 43, 46)
+            + get_point_dist(points, 44, 47)
         ) / 4.0
 
-        ratio = height.astype(ms.float32)  / width.astype(ms.float32)
-        return ratio.astype(ms.float32)  # [B]
+        ratio = height / width
+        return ratio  # [B]
 
     def get_eye_loss(self, lks, z_blink):
         eye_ratio = self.get_eye_ratio(lks)
@@ -50,8 +55,7 @@ class LandmarksLoss(nn.LossBase):
             ratio_gt: bs, T, 1
         """
         loss_eye = self.get_eye_loss(landmarks_rep, ratio_gt)
-        # loss_point = ops.mean(ops.dist(landmarks_ori, landmarks_rep, 2))
-        loss_point = 0.0
+        loss_point = ops.dist(landmarks_ori, landmarks_rep, 2)
 
         loss = 200.0 * loss_eye + loss_point
 
@@ -59,7 +63,14 @@ class LandmarksLoss(nn.LossBase):
 
 
 class LipReadingLoss(nn.LossBase):
-    def __init__(self, lipreading_video, lipreading_audio, renderer, reduction="mean", batch_size=1):
+    def __init__(
+        self,
+        lipreading_video,
+        lipreading_audio,
+        renderer,
+        reduction="mean",
+        batch_size=1,
+    ):
         super().__init__(reduction)
         self.lipreading_video = lipreading_video
         self.lipreading_audio = lipreading_audio
@@ -162,7 +173,7 @@ class LipReadingLoss(nn.LossBase):
         # codes borrowed from https://github.com/filby89/spectre/blob/master/src/trainer_spectre.py
         # ---- initialize values for cropping the face around the mouth for lipread loss ---- #
 
-        """ lipread loss - first crop the mouths of the input and rendered faces
+        """lipread loss - first crop the mouths of the input and rendered faces
         and then calculate the cosine distance of features
         """
 
@@ -196,7 +207,9 @@ class LipReadingLoss(nn.LossBase):
         input_tensor = self.preprocess_images(pred_faces, landmarks)
         input_audio = self.preprocess_audio(audio_wav)
 
-        c_p = self.lipreading_audio(input_audio, [input_audio.shape[-1]] * len(input_audio))  # (B, 500)
+        c_p = self.lipreading_audio(
+            input_audio, [input_audio.shape[-1]] * len(input_audio)
+        )  # (B, 500)
         c_gt = self.lipreading_video(
             input_tensor, [input_tensor.shape[-1]] * len(input_tensor)
         )

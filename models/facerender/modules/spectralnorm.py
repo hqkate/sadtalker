@@ -103,10 +103,7 @@ class Conv2dNormalized(nn.Cell):
             name="weight_v",
         )
 
-        if is_ascend():
-            self.spectral_norm = SpectralNormAscendOpt()
-        else:
-            self.spectral_norm = SpectralNorm()
+        self.spectral_norm = SpectralNorm()
 
     @staticmethod
     def initialize_param(*param_shape):

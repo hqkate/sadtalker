@@ -9,6 +9,7 @@ import mindspore as ms
 import utils.audio as audio
 from PIL import Image
 from skimage import img_as_float32
+from utils.preprocess import split_coeff
 
 
 def crop_pad_audio(wav, audio_length):
@@ -317,6 +318,7 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         idlemode=False,
         length_of_audio=False,
         use_blink=True,
+        use_wav2lip=True,
     ):
         super().__init__(
             args=args,
@@ -330,18 +332,20 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         )
 
         self.audios, self.images = read_filelist(args.train_list)
+        self.use_wav2lip = use_wav2lip
 
     def get_output_columns(self):
-        return [
+        cols = [
             "indiv_mels",
             "ref",
             "num_frames",
             "ratio_gt",
-            # "audio_wav",
             "source_image",
-            # "target_image",
-            "masked_src_img",
         ]
+        if self.use_wav2lip:
+            cols.append("masked_src_img")
+            # cols.append("exp_coeff_wav2lip")
+        return cols
 
     def process_data(self, image_path, audio_path):
 
@@ -378,16 +382,6 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
         # tgt_image = crop_frames[frame_idx]
         # tgt_image = ms.Tensor(img_as_float32(tgt_image))
 
-        # mask image for wav2lip
-        img_size = 96
-        src_image_resized = cv2.resize(src_image, (img_size, img_size))
-        masked_image = src_image_resized.copy()
-        masked_image = cv2.resize(masked_image, (img_size, img_size))
-        masked_image[:, img_size // 2 :] = 0.0
-        masked_src_img = np.concatenate((masked_image, src_image_resized), axis=2) / 255.0
-        masked_src_img = np.repeat(np.expand_dims(np.transpose(masked_src_img, (2, 0, 1)), 0), num_frames, axis=0)
-        masked_src_img = ms.Tensor(masked_src_img, ms.float32)
-
         data_dict = {
             "indiv_mels": indiv_mels,
             "ref": ref_coeff,
@@ -399,10 +393,22 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "first_coeff_path": first_coeff_path,
             "crop_pic_path": crop_pic_path,
             "crop_info": crop_info,
-            "masked_src_img": masked_src_img,
             "source_image": src_image_ts,
-            # "target_image": tgt_image,
         }
+
+        # 5. wav2lip
+        # mask image for wav2lip
+        img_size = 96
+        src_image_resized = cv2.resize(src_image, (img_size, img_size))
+        masked_image = src_image_resized.copy()
+        masked_image = cv2.resize(masked_image, (img_size, img_size))
+        masked_image[:, img_size // 2 :] = 0.0
+        masked_src_img = np.concatenate((masked_image, src_image_resized), axis=2) / 255.0
+        masked_src_img = np.repeat(np.expand_dims(np.transpose(masked_src_img, (2, 0, 1)), 0), num_frames, axis=0)
+        masked_src_img = ms.Tensor(masked_src_img, ms.float32)
+
+        if self.use_wav2lip:
+            data_dict["masked_src_img"] = masked_src_img
 
         return data_dict
 
