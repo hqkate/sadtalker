@@ -148,10 +148,9 @@ class ParametricFaceModel:
         Parameters:
             face_shape       -- torch.tensor, size (B, N, 3)
         """
-
-        v1 = face_shape[:, self.face_buf[:, 0].tolist(), :]
-        v2 = face_shape[:, self.face_buf[:, 1].tolist(), :]
-        v3 = face_shape[:, self.face_buf[:, 2].tolist(), :]
+        v1 = face_shape.index_select(1, self.face_buf[:, 0])
+        v2 = face_shape.index_select(1, self.face_buf[:, 1])
+        v3 = face_shape.index_select(1, self.face_buf[:, 2])
         e1 = v1 - v2
         e2 = v2 - v3
 
@@ -159,8 +158,8 @@ class ParametricFaceModel:
         face_norm = ops.cross(e1, e2, dim=-1)
         face_norm = l2_normalize(face_norm)
         face_norm = ops.cat([face_norm, ops.zeros((face_norm.shape[0], 1, 3))], axis=1)
-
-        vertex_norm = ops.sum(face_norm[:, list(self.point_buf)], dim=2)
+        vertex_norm = ops.sum(ops.gather(face_norm, self.point_buf, 1), dim=2)
+        # vertex_norm = ops.sum(face_norm[:, list(self.point_buf)], dim=2)
         vertex_norm = l2_normalize(vertex_norm)
         return vertex_norm
 
@@ -405,7 +404,7 @@ class ParametricFaceModel:
 
         return face_vertex, face_texture, face_color, face_proj, landmark
 
-    def compute_for_render_landmarks(self, coeffs, new_exp=None):
+    def compute_for_render_landmarks(self, coeffs):
         """
         Return:
             face_vertex     -- torch.tensor, size (B, N, 3), in camera coordinate
@@ -415,11 +414,8 @@ class ParametricFaceModel:
             coeffs          -- torch.tensor, size (B, 257)
         """
         id_coeffs, exp_coeffs, _, angles, _, translations = coeffs
-        if new_exp is not None:
-            exp_coeffs = new_exp
         face_shape = self.compute_shape(id_coeffs, exp_coeffs)
         rotation = self.compute_rotation(angles)
-
         face_shape_transformed = self.transform(face_shape, rotation, translations)
         face_vertex = self.to_camera(face_shape_transformed)
 

@@ -6,7 +6,8 @@ from mindspore import ops, nn
 from utils.preprocess import split_coeff
 from losses.expnet_loss import LandmarksLoss, LipReadingLoss
 
-# from models.lipreading import get_lipreading_model
+from models.lipreading import get_lipreading_model
+from models.face3d.pytorch3d.facerecon_model import FaceReconModel
 # from models.external.face3d.face_renderer import renderer
 from models.audio2exp.utils import get_recon_model, get_wav2lip_model
 
@@ -20,9 +21,10 @@ class ExpNetWithLossCell(nn.Cell):
         self.bfm = bfm
         self.cfg = cfg
 
-        # lipreading_video = get_lipreading_model("video")
-        # lipreading_audio = get_lipreading_model("audio")
-        # lipreading_renderer = renderer
+        lipreading_video = get_lipreading_model("video")
+        lipreading_audio = get_lipreading_model("audio")
+        recon_model = FaceReconModel(args)
+        lipreading_renderer = recon_model.renderer
 
         # distill loss (lip-only coefficients, MSE)
         self.distill_loss = nn.MSELoss()
@@ -31,19 +33,20 @@ class ExpNetWithLossCell(nn.Cell):
         self.lks_loss = LandmarksLoss()
 
         # lip-reading loss (cross-entropy)
-        # self.lread_loss = LipReadingLoss(
-        #     lipreading_video,
-        #     lipreading_audio,
-        #     lipreading_renderer,
-        #     batch_size=args.batch_size
-        # )
+        self.lread_loss = LipReadingLoss(
+            lipreading_video,
+            lipreading_audio,
+            lipreading_renderer,
+            batch_size=args.batch_size
+        )
 
     def construct(
         self,
         current_mel_input,
         curr_ref,
         ratio_gt,
-        coeffs
+        coeffs,
+        audio_wav
     ):
         # expnet
         exp_coeff_pred = self.expnet(current_mel_input, curr_ref, ratio_gt)
@@ -65,31 +68,24 @@ class ExpNetWithLossCell(nn.Cell):
 
         # landmarks loss (eyes)
         landmarks_w2l = self.bfm.compute_for_render_landmarks(coeffs)  # bs*T, 68, 2
-        # landmarks_w2l = render_results_1[-1]
-
-        landmarks_rep = self.bfm.compute_for_render_landmarks(new_coeffs)
-        # landmarks_rep = render_results_2[-1]
-
-        # face_vertex = render_results_2[0]
-        # face_texture = render_results_2[1]
-        # face_color = render_results_2[2]
-        # face_proj = render_results_2[3]
+        face_vertex, face_texture, face_color, face_proj, landmarks_rep = self.bfm.compute_for_render_new(new_coeffs)
 
         loss_lks = self.lks_loss(landmarks_w2l, landmarks_rep, ratio_gt)
         # loss_lks = 0.0
 
         # # lip-reading loss (cross-entropy)
-        # loss_read = self.lread_loss(
-        #     audio_wav,
-        #     face_vertex,
-        #     face_color,
-        #     self.bfm1.triangle,
-        #     face_proj,
-        #     landmarks_rep,
-        # )
-        # loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
+        loss_read = self.lread_loss(
+            audio_wav,
+            face_vertex,
+            face_color,
+            self.bfm.face_buf,
+            # self.bfm.triangle,
+            # face_proj,
+            landmarks_rep,
+        )
+        loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
 
-        loss = 2.0 * loss_distill + 0.01 * loss_lks
+        # loss = 2.0 * loss_distill + 0.01 * loss_lks
 
         return loss
 
@@ -114,6 +110,7 @@ class ExpNetTrainer:
         curr_ref = data_batch["ref"][:, :, :64]
         ratio_gt = data_batch["ratio_gt"]
         masked_src_img = data_batch["masked_src_img"]
+        audio_wav = data_batch["audio_wav"]
 
         # get wav2lip coeffs
         audiox = current_mel_input.view(-1, 1, 80, 16)
@@ -127,7 +124,7 @@ class ExpNetTrainer:
         print("running train_one_step ...")
         self.train_one_step.set_train(True)
         loss_g = self.train_one_step(
-            current_mel_input, curr_ref, ratio_gt, coeffs
+            current_mel_input, curr_ref, ratio_gt, coeffs, audio_wav
         )
         return loss_g
 

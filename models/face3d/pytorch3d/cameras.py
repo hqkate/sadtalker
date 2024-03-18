@@ -737,7 +737,6 @@ def get_world_to_view_transform(
     """
     # TODO: also support the case where RT is specified as one matrix
     # of shape (N, 4, 4).
-
     if T.shape[0] != R.shape[0]:
         msg = "Expected R, T to have the same batch dimension; got %r, %r"
         raise ValueError(msg % (R.shape[0], T.shape[0]))

@@ -343,7 +343,7 @@ class Meshes:
         if isinstance(verts, list) and isinstance(faces, list):
             self._verts_list = verts
             self._faces_list = [
-                f[f.gt(-1).all(1)].to(ms.int64) if len(f) > 0 else f for f in faces
+                f[f.gt(-1).all(1)].to(ms.int32) if len(f) > 0 else f for f in faces
             ]
             self._N = len(self._verts_list)
             self.valid = ops.zeros(
@@ -374,7 +374,7 @@ class Meshes:
                 raise ValueError(
                     "Verts or Faces tensors have incorrect dimensions.")
             self._verts_padded = verts
-            self._faces_padded = faces.astype(ms.int64)
+            self._faces_padded = faces
             self._N = self._verts_padded.shape[0]
             self._V = self._verts_padded.shape[1]
 
@@ -398,7 +398,7 @@ class Meshes:
                 self._num_verts_per_mesh = ops.full(
                     size=(self._N,),
                     fill_value=self._V,
-                    dtype=ms.int64,
+                    dtype=ms.int32,
                 )
 
         else:
@@ -410,10 +410,10 @@ class Meshes:
 
         if self.isempty():
             self._num_verts_per_mesh = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             self._num_faces_per_mesh = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
 
         # Set the num verts/faces on the textures if present.
@@ -522,7 +522,7 @@ class Meshes:
                 self._verts_padded is not None
             ), "verts_padded is required to compute verts_list."
             self._verts_list = struct_utils.padded_to_list(
-                self._verts_padded, self.num_verts_per_mesh().asnumpy().tolist()
+                self._verts_padded, self.num_verts_per_mesh()
             )
         return self._verts_list
 
@@ -538,7 +538,7 @@ class Meshes:
                 self._faces_padded is not None
             ), "faces_padded is required to compute faces_list."
             self._faces_list = struct_utils.padded_to_list(
-                self._faces_padded, self.num_faces_per_mesh().asnumpy().tolist()
+                self._faces_padded, self.num_faces_per_mesh()
             )
         return self._faces_list
 
@@ -872,7 +872,7 @@ class Meshes:
 
         if self.isempty():
             self._verts_normals_packed = ops.zeros(
-                (self._N, 3), dtype=ms.int64
+                (self._N, 3), dtype=ms.int32
             )
         else:
             faces_packed = self.faces_packed()
@@ -920,7 +920,7 @@ class Meshes:
 
         if self.isempty():
             self._faces_padded = ops.zeros(
-                (self._N, 0, 3), dtype=ms.int64
+                (self._N, 0, 3), dtype=ms.int32
             )
             self._verts_padded = ops.zeros(
                 (self._N, 0, 3), dtype=ms.float32
@@ -962,6 +962,7 @@ class Meshes:
 
         # Packed can be calculated from padded or list, so can call the
         # accessor function for verts_list and faces_list.
+
         verts_list = self.verts_list()
         faces_list = self.faces_list()
         if self.isempty():
@@ -969,25 +970,25 @@ class Meshes:
                 (0, 3), dtype=ms.float32
             )
             self._verts_packed_to_mesh_idx = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             self._mesh_to_verts_packed_first_idx = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             self._num_verts_per_mesh = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             self._faces_packed = -(
-                ops.ones((0, 3), dtype=ms.int64)
+                ops.ones((0, 3), dtype=ms.int32)
             )
             self._faces_packed_to_mesh_idx = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             self._mesh_to_faces_packed_first_idx = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             self._num_faces_per_mesh = ops.zeros(
-                (0,), dtype=ms.int64
+                (0,), dtype=ms.int32
             )
             return
 
@@ -1033,10 +1034,10 @@ class Meshes:
 
         if self.isempty():
             self._edges_packed = ops.full(
-                (0, 2), fill_value=-1, dtype=ms.int64
+                (0, 2), fill_value=-1, dtype=ms.int32
             )
-            self._edges_packed_to_mesh_idx = torch.zeros(
-                (0,), dtype=ms.int64
+            self._edges_packed_to_mesh_idx = ops.zeros(
+                (0,), dtype=ms.int32
             )
             return
 
@@ -1105,7 +1106,7 @@ class Meshes:
 
         # Compute first idx for each mesh in edges_packed
         mesh_to_edges_packed_first_idx = ops.zeros(
-            self._N, dtype=ms.int64
+            self._N, dtype=ms.int32
         )
         num_edges_cumsum = num_edges_per_mesh.cumsum(dim=0)
         mesh_to_edges_packed_first_idx[1:] = num_edges_cumsum[:-1].copy()

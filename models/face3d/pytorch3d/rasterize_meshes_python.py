@@ -91,7 +91,6 @@ def rasterize_meshes_python(  # noqa: C901
         image_size, tuple) else (image_size, image_size)
 
     K = faces_per_pixel
-
     verts_packed = meshes.verts_packed()
     faces_packed = meshes.faces_packed()
     faces_verts = verts_packed[faces_packed]

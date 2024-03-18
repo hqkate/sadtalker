@@ -341,6 +341,7 @@ class TrainAudioCoeffDataset(AudioCoeffDataset):
             "num_frames",
             "ratio_gt",
             "source_image",
+            "audio_wav",
         ]
         if self.use_wav2lip:
             cols.append("masked_src_img")

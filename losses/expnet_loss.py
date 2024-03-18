@@ -189,18 +189,21 @@ class LipReadingLoss(nn.LossBase):
         return mouths_pred
 
     def construct(
-        self, audio_wav, face_vertex, face_color, triangle_coeffs, face_proj, landmarks
+        self, audio_wav, face_vertex, face_color, face_buf, landmarks
     ):
         # face rendering
-        pred_faces = []
-        for i in range(self._bs):
-            pred_face = self.renderer(
-                face_vertex[i, :, :].asnumpy(),
-                face_color[i, :, :].asnumpy(),
-                triangle_coeffs.asnumpy(),
-            )
-            pred_face = ms.Tensor(pred_face, ms.float32)
-            pred_faces.append(pred_face.unsqueeze(0))
+        # pred_faces = []
+        # for i in range(self._bs):
+            # pred_face = self.renderer(
+            #     face_vertex[i, :, :],
+            #     face_color[i, :, :],
+            #     triangle_coeffs,
+            # )
+            # pred_face = ms.Tensor(pred_face, ms.float32)
+            # pred_faces.append(pred_face.unsqueeze(0))
+
+        _, _, pred_faces = self.renderer.forward_rendering(
+            face_vertex, face_buf, feat=face_color)
 
         pred_faces = ops.cat(pred_faces)  # (84, 256, 256, 3)
 
@@ -216,61 +219,3 @@ class LipReadingLoss(nn.LossBase):
 
         loss = self.celoss(ops.log_softmax(c_p), ops.log_softmax(c_gt))
         return loss
-
-
-"""
-class ExpNetLoss(nn.LossBase):
-    def __init__(self, reduction='mean'):
-        super().__init__(reduction)
-        self.distill_loss = nn.MSELoss()
-        self.lks_loss = LandmarksLoss()
-        self.lread_loss = LipReadingLoss()
-
-        self.bfm1 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
-        self.bfm2 = ParametricFaceModel(bfm_folder="checkpoints/BFM_Fitting")
-
-        self.cast = ops.Cast()
-
-    def construct(self, exp_coeff_pred, wav2lip_coeff, ratio_gt, audio_wav
-                  ):
-
-        # (id_coeffs, exp_coeffs, tex_coeffs, angles, gammas, translations)
-        coeffs = split_coeff(wav2lip_coeff)
-        exp_coeff_wav2lip = coeffs[1]
-
-        new_coeffs = (
-            coeffs[0],
-            exp_coeff_pred.view(-1, 64),
-            coeffs[2],
-            coeffs[3],
-            coeffs[4],
-            coeffs[5]
-        )
-
-        # distill loss (lip-only coefficients, MSE)
-        loss_distill = self.distill_loss(
-            exp_coeff_pred.view(-1, 64), exp_coeff_wav2lip)
-
-        # landmarks loss (eyes)
-        render_results_1 = self.bfm1.compute_for_render_new(coeffs)  # bs*T, 68, 2
-        landmarks_w2l = render_results_1[-1]
-
-        render_results_2 = self.bfm2.compute_for_render_new(new_coeffs)
-        landmarks_rep = render_results_2[-1]
-
-        face_vertex = render_results_2[0]
-        face_texture = render_results_2[1]
-        face_color = render_results_2[2]
-        face_proj = render_results_2[3]
-
-        # landmarks_w2l = ms.Tensor(np.load("landmarks_w2l.npy"), ms.float32)
-        # landmarks_rep = ms.Tensor(np.load("landmarks_rep.npy"), ms.float32)
-        loss_lks = self.lks_loss(landmarks_w2l, landmarks_rep, ratio_gt)
-
-        # lip-reading loss (cross-entropy)
-        loss_read = self.lread_loss(audio_wav, face_vertex, face_color, self.bfm1.triangle, face_proj, landmarks_rep)
-
-        loss = 2.0 * loss_distill + 0.01 * loss_lks + 0.01 * loss_read
-
-        return loss
-"""

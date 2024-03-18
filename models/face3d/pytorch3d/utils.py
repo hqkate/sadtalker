@@ -69,7 +69,8 @@ def convert_to_tensors_and_broadcast(
 
         # Expand broadcast dim and keep non broadcast dims the same size
         expand_sizes = (N,) + (-1,) * len(c.shape[1:])
-        args_Nd.append(c.expand(size=ms.Tensor(expand_sizes, ms.int32)))
+        args_Nd.append(ops.broadcast_to(c, expand_sizes))
+        # args_Nd.append(c.expand(size=ms.Tensor(expand_sizes, ms.int32)))
 
     return args_Nd
 
@@ -355,7 +356,7 @@ def padded_to_list(
     Returns:
       x_list: a list of tensors sharing the memory with the input.
     """
-    x_list = list(x.unbind(0))
+    x_list = list(ops.unbind(x, 0))
 
     if split_size is None:
         return x_list
@@ -366,11 +367,12 @@ def padded_to_list(
             "Split size must be of same length as inputs first dimension")
 
     for i in range(N):
-        if isinstance(split_size[i], int):
-            x_list[i] = x_list[i][: split_size[i]]
-        else:
+        if isinstance(split_size[i], list):
             slices = tuple(slice(0, s) for s in split_size[i])  # pyre-ignore
             x_list[i] = x_list[i][slices]
+        else:
+            x_list[i] = x_list[i][: split_size[i]]
+
     return x_list
 
 

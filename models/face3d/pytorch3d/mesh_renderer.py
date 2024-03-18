@@ -329,9 +329,8 @@ class MeshRenderer():
         raster_settings = RasterizationSettings(
             image_size=rsize
         )
-
-        verts = ms.Tensor(vertex[..., :3].asnumpy())
-        faces = ms.Tensor(tri.unsqueeze(0).repeat(vertex.shape[0], axis=0).asnumpy())
+        verts = vertex[..., :3]
+        faces = tri.unsqueeze(0).repeat(vertex.shape[0], axis=0)
 
         mesh = Meshes(verts, faces)
 

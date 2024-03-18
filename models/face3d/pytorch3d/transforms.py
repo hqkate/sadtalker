@@ -29,9 +29,9 @@ def _broadcast_bmm(a, b) -> ms.Tensor:
             msg = "Expected batch dim for bmm to be equal or 1; got %r, %r"
             raise ValueError(msg % (a.shape, b.shape))
         if len(a) == 1:
-            a = a.expand(len(b), -1, -1)
+            a = ops.broadcast_to(a, (len(b), -1, -1))
         if len(b) == 1:
-            b = b.expand(len(a), -1, -1)
+            b = ops.broadcast_to(b, (len(a), -1, -1))
     return a.bmm(b)
 
 
@@ -176,7 +176,6 @@ class Transform3d:
                 If `None`, initializes with identity using
                 the specified `device` and `dtype`.
         """
-
         if matrix is None:
             self._matrix = ops.eye(4, dtype=dtype).view(1, 4, 4)
         else:
@@ -518,7 +517,7 @@ class Translate(Transform3d):
 
         mat = ops.eye(4, dtype=dtype)
         mat = mat.view(1, 4, 4).repeat(N, axis=1)
-        mat[:, 3, :3] = xyz
+        # mat[:, 3, :3] = xyz # TODO!!!
         self._matrix = mat
 
     def _get_matrix_inverse(self) -> ms.Tensor:
@@ -582,7 +581,7 @@ class Scale(Transform3d):
 class Rotate(Transform3d):
     def __init__(
         self,
-        R: ms.Tensor,
+        xR: ms.Tensor,
         dtype: ms.dtype = ms.float32,
         orthogonal_tol: float = 1e-5,
     ) -> None:
@@ -596,19 +595,19 @@ class Rotate(Transform3d):
 
         """
         super().__init__(dtype=dtype)
-        if R.dim() == 2:
-            R = R[None]
-        if R.shape[-2:] != (3, 3):
+        if xR.dim() == 2:
+            xR = xR[None]
+        if xR.shape[-2:] != (3, 3):
             msg = "R must have shape (3, 3) or (N, 3, 3); got %s"
-            raise ValueError(msg % repr(R.shape))
+            raise ValueError(msg % repr(xR.shape))
         if os.environ.get("PYTORCH3D_CHECK_ROTATION_MATRICES", "0") == "1":
             # Note: aten::all_close in the check is computationally slow, so we
             # only run the check when PYTORCH3D_CHECK_ROTATION_MATRICES is on.
-            _check_valid_rotation_matrix(R, tol=orthogonal_tol)
-        N = R.shape[0]
+            _check_valid_rotation_matrix(xR, tol=orthogonal_tol)
+        N = xR.shape[0]
         mat = ops.eye(4, dtype=dtype)
         mat = mat.view(1, 4, 4).repeat(N, axis=1)
-        mat[:, :3, :3] = R
+        # mat[:, :3, :3] = xR # TODO!!
         self._matrix = mat
 
     def _get_matrix_inverse(self) -> ms.Tensor:
@@ -757,32 +756,32 @@ def _handle_angle_input(
         return _handle_coord(x, dtype)
 
 
-def _broadcast_bmm(a, b) -> ms.Tensor:
-    """
-    Batch multiply two matrices and broadcast if necessary.
+# def _broadcast_bmm(a, b) -> ms.Tensor:
+#     """
+#     Batch multiply two matrices and broadcast if necessary.
 
-    Args:
-        a: torch tensor of shape (P, K) or (M, P, K)
-        b: torch tensor of shape (N, K, K)
+#     Args:
+#         a: torch tensor of shape (P, K) or (M, P, K)
+#         b: torch tensor of shape (N, K, K)
 
-    Returns:
-        a and b broadcast multiplied. The output batch dimension is max(N, M).
+#     Returns:
+#         a and b broadcast multiplied. The output batch dimension is max(N, M).
 
-    To broadcast transforms across a batch dimension if M != N then
-    expect that either M = 1 or N = 1. The tensor with batch dimension 1 is
-    expanded to have shape N or M.
-    """
-    if a.dim() == 2:
-        a = a[None]
-    if len(a) != len(b):
-        if not ((len(a) == 1) or (len(b) == 1)):
-            msg = "Expected batch dim for bmm to be equal or 1; got %r, %r"
-            raise ValueError(msg % (a.shape, b.shape))
-        if len(a) == 1:
-            a = a.expand(ms.Tensor((len(b), -1, -1), ms.int32))
-        if len(b) == 1:
-            b = b.expand(ms.Tensor((len(a), -1, -1), ms.int32))
-    return a.bmm(b)
+#     To broadcast transforms across a batch dimension if M != N then
+#     expect that either M = 1 or N = 1. The tensor with batch dimension 1 is
+#     expanded to have shape N or M.
+#     """
+#     if a.dim() == 2:
+#         a = a[None]
+#     if len(a) != len(b):
+#         if not ((len(a) == 1) or (len(b) == 1)):
+#             msg = "Expected batch dim for bmm to be equal or 1; got %r, %r"
+#             raise ValueError(msg % (a.shape, b.shape))
+#         if len(a) == 1:
+#             a = a.expand(ms.Tensor((len(b), -1, -1), ms.int32))
+#         if len(b) == 1:
+#             b = b.expand(ms.Tensor((len(a), -1, -1), ms.int32))
+#     return a.bmm(b)
 
 
 def _check_valid_rotation_matrix(R, tol: float = 1e-7) -> None:
